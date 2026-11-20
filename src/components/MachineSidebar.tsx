@@ -335,7 +335,7 @@ export function removablePc(machine: Pick<Machine, "kind" | "state" | "herdr_pro
 }
 
 export function manageActions(machine: Pick<Machine, "kind" | "herdr_profile_id" | "enabled" | "target" | "action_required">, { busy, canHide }: { busy: boolean; canHide: boolean }): { id: ManageAction; disabled: boolean }[] {
-  const own = !machine.herdr_profile_id && machine.kind !== "hc";
+  const own = !machine.herdr_profile_id && machine.kind !== "hc" && machine.kind !== "session";
   const reachable = machine.enabled && Boolean(machine.target);
   const actions: { id: ManageAction; disabled: boolean }[] = [];
   if (own) actions.push({ id: "rename", disabled: busy }, { id: "toggle", disabled: busy });
@@ -414,8 +414,8 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
     if (save && typed !== "" && typed !== machine.name) void mutate("PATCH", { name: typed });
   };
   const stateWords = machine.action_required === "setup" ? t("Setup needed") : asksWhatToConnect(machine) ? t("Choose what to connect to") : t(STATE_WORD[machine.state]);
-  const stateLine = machine.kind === "hc" ? stateWords : `${stateWords} · ${machine.kind === "relay" ? t("through the relay") : machine.kind === "address" ? t("by its address") : t("over SSH")}`;
-  const manageNote = machine.kind === "hc" ? t("A machine of herdr-core. Add, rename or remove it with hc machine or in the Herdr app.") : machine.herdr_profile_id ? t("Managed by herdr. Rename, disable or remove it there.") : null;
+  const stateLine = machine.kind === "hc" ? stateWords : `${stateWords} · ${machine.kind === "relay" ? t("through the relay") : machine.kind === "address" ? t("by its address") : machine.kind === "session" ? t("on this PC") : t("over SSH")}`;
+  const manageNote = machine.kind === "hc" ? t("A machine of herdr-core. Add, rename or remove it with hc machine or in the Herdr app.") : machine.kind === "session" ? t("Another herdr session on this PC. It is listed while that session runs.") : machine.herdr_profile_id ? t("Managed by herdr. Rename, disable or remove it there.") : null;
   const manageItems = (): RowMenuItem[] => manageActions(machine, { busy, canHide }).map(({ id, disabled }): RowMenuItem => {
     switch (id) {
       case "rename": return { id, disabled, label: t("Rename…"), icon: Pencil, run: () => { setName(machine.name); setRenaming(true); } };

@@ -56,6 +56,8 @@ export const MACHINES_ZH: Record<string, string> = {
   "Remove PC…": "移除 PC…",
   "over SSH": "通过 SSH",
   "by its address": "通过地址",
+  "on this PC": "在此 PC 上",
+  "Another herdr session on this PC. It is listed while that session runs.": "这是此 PC 上的另一个 herdr 会话。它运行期间会显示在这里。",
   "through the relay": "通过中继",
   "No saved sessions": "没有已保存的会话",
   "Updating the bridge": "正在更新 bridge",

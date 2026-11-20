@@ -6,6 +6,7 @@ const RUN: Record<EntryName, () => Promise<unknown>> = {
   supervisor: () => import("./supervisor.ts").then((entry) => entry.runSupervisor(process.env["OVIS_SOURCE_ROOT"] || ROOT)),
   remote: () => import("./remote-entry.ts"),
   machine: () => import("./herdr-core/machine-entry.ts"),
+  session: () => import("./session-entry.ts"),
   plugin: () => import("../scripts/plugin.ts").then((entry) => entry.runPlugin()),
   askpass: () => import("./ssh-askpass.ts"),
   "windows-launch": () => import("./windows-launch.ts"),

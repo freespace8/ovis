@@ -43,7 +43,8 @@ import { bridgePins } from "./herdr-core/pin-label.ts";
 import { herdrCoreFacts, rediscoverHc } from "./herdr-core/discovery.ts";
 import { HC_RELEASE, hcInstallTarget, installHc } from "./herdr-core/install.ts";
 import { userHome } from "./user-home.ts";
-import { type HerdrCoreFacts, LOCAL_MACHINE } from "../shared/machines.ts";
+import { type FoundHerdrSession, type HerdrCoreFacts, LOCAL_MACHINE } from "../shared/machines.ts";
+import { discoverPinnableHerdrSessions } from "./herdr-discovery.ts";
 import { type AlertTiming, defaultStateDir } from "./push.ts";
 import { mergeSiblingState, recordedLegacyCredential, siblingStateDir } from "./state-merge.ts";
 import { moveLegacyStateDir } from "./update-state.ts";
@@ -212,6 +213,8 @@ export function createServer(
     /** false: the panes' files are on another machine (server/herdr-core/machine-entry.ts), so no route reads or makes files on this disk for them */
     localFiles?: boolean;
     herdrProfiles?: () => Promise<HerdrMachineProfile[]>;
+    /** the herdr sessions of this account running on this PC, each served as a machine of its own (server/session-bridge.ts); not set, none is */
+    herdrSessions?: { read: () => Promise<FoundHerdrSession[]>; pollMs?: number };
     herdrConfigPath?: string;
     registerBridge?: boolean;
     /** the token a connection server presents as this PC's bridge; random unless a test names it */
@@ -889,7 +892,7 @@ export async function serve(): Promise<void> {
     instance = createServer({ updates, ...(profile ? { profile: "machine", machineRefusal, port: Number(startEnv["PORT"] ?? 0) } : { herdrUpdate: new HerdrUpdater(), herdrCoreFacts, herdrCoreInstaller: herdrCoreInstaller(),
       launchAccepted: () => launchAccepted,
       runtimeService: runtimeService({ stateDir, port: Number(startEnv["PORT"] || DEFAULT_PORT), serving: choice.runtime, source: choice.source, ...(fallback ? { fallback } : {}), env: startEnv, core: herdrCoreFacts, accepted: () => launchAccepted, restart: (id) => process.send?.({ type: "runtime-restart", id }) }) }),
-      portal, relay, tailnet, telemetry, registerBridge: true, herdrProfiles: readHerdrProfiles, shellAgents: new ShellAgentLocator(), agentDetector: new AgentDetector({ locate: catalogLocator({ probe: defaultLoginProbe() }) }), stateDir, siblingStateDir: siblingStateDir(stateDir),
+      portal, relay, tailnet, telemetry, registerBridge: true, herdrProfiles: readHerdrProfiles, herdrSessions: { read: async () => (await discoverPinnableHerdrSessions()).sessions }, shellAgents: new ShellAgentLocator(), agentDetector: new AgentDetector({ locate: catalogLocator({ probe: defaultLoginProbe() }) }), stateDir, siblingStateDir: siblingStateDir(stateDir),
       desktopActivity: process.env["OVIS_DESKTOP_APP"] === "1",
       ...(desktopOwnerFd !== null ? { desktopOwner: desktopOwnerFdChannel(desktopOwnerFd) } : {}),
       ...(lanConfig !== null && !("error" in lanConfig) ? { lanHttps: lanConfig } : {}) });

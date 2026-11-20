@@ -12,6 +12,7 @@ export const ENTRIES = {
   supervisor: "server/supervisor.ts",
   remote: "server/remote-entry.ts",
   machine: "server/herdr-core/machine-entry.ts",
+  session: "server/session-entry.ts",
   plugin: "scripts/plugin.ts",
   askpass: "server/ssh-askpass.ts",
   "windows-launch": "server/windows-launch.ts",

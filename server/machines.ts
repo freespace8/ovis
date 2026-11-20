@@ -5,7 +5,7 @@ import { createServer as tcpServer } from "node:net";
 import { hostname } from "node:os";
 import { basename, join, posix } from "node:path";
 import { version } from "../package.json";
-import { BRIDGE_PROTOCOL, LOCAL_MACHINE, OWN_UPDATE_OFFER, REMOTE_BUNDLE_VERSION, type BridgeIdentity, type HerdrIdentity, type RemoteOvis, type Machine, type MachineAction, type MachineEvent, type MachineSettings, type PcInstallJob, type PcInstallRequest, type PcUpdateAll, type PcUpdateOffer, type SetupAction, type SetupJob, type SetupProgress, type SetupRequest, type SshTarget } from "../shared/machines.ts";
+import { BRIDGE_PROTOCOL, LOCAL_MACHINE, OWN_UPDATE_OFFER, REMOTE_BUNDLE_VERSION, sessionMachineId, type BridgeIdentity, type HerdrIdentity, type RemoteOvis, type Machine, type MachineAction, type MachineEvent, type MachineSettings, type PcInstallJob, type PcInstallRequest, type PcUpdateAll, type PcUpdateOffer, type SetupAction, type SetupJob, type SetupProgress, type SetupRequest, type SshTarget } from "../shared/machines.ts";
 import type { ServerMessage, SessionSnapshot, HerdrPane } from "../shared/protocol.ts";
 import type { PushService } from "./push.ts";
 import { alertStatus } from "../shared/notify-policy.ts";
@@ -72,6 +72,7 @@ interface Runtime {
   forward?: AddressPcForward;
   routeProbes?: RouteProbes;
   hc?: { id: string; name: string; bridge?: MachineBridge };
+  session?: { socket: string; bridge?: MachineBridge };
   endpoint?: { url: string; token: string };
   observer?: WebSocket;
   retry?: ReturnType<typeof setTimeout>;
@@ -182,6 +183,10 @@ const NOT_BRIDGE_APPROVED = "Review the bridge update in this PC's dialog first:
  */
 const MOVE_OFFER_MS = { idle: 60_000, active: 5000 };
 const HC_MACHINE_MANAGED = "This PC is a machine of herdr-core: add, rename or remove it with `hc machine` or in the Herdr app.";
+const SESSION_MACHINE_MANAGED = "This PC is another herdr session on this computer: it is listed while that session runs, and stopped with it.";
+/** A machine this server finds by itself (a machine of herdr-core, another herdr session here), never saved or edited. */
+const foundPc = (machine: Pick<Machine, "kind">): boolean => machine.kind === "hc" || machine.kind === "session";
+const foundPcRefusal = (machine: Pick<Machine, "kind">): string => machine.kind === "hc" ? HC_MACHINE_MANAGED : SESSION_MACHINE_MANAGED;
 export const SOURCE_CHECK_INTERVAL_MS = 1000;
 export const DEMANDED_RETRY_INTERVAL_MS = 5000;
 interface SourceCheck { token: number; promise: Promise<string | null>; abort: AbortController }
@@ -333,6 +338,8 @@ export class MachineManager {
   private discoveryStarted = false;
   private hcTimer?: ReturnType<typeof setTimeout>;
   private hcStart?: (machine: Pick<HcMachine, "id" | "name">) => Promise<MachineBridge>;
+  private sessionTimer?: ReturnType<typeof setTimeout>;
+  private sessionStart?: (id: string, socket: string) => Promise<MachineBridge>;
   private settingsPath: string;
   private preferences: MachineSettings = { ...DEFAULT_SETTINGS };
   private autoChain: Promise<void> = Promise.resolve();
@@ -588,6 +595,53 @@ export class MachineManager {
     }
     if (changed) this.emit();
   }
+  /** Serves every herdr session `read` names as a machine of its own, and drops a machine whose session is gone. */
+  watchHerdrSessions(read: () => Promise<FoundHerdrSession[]>, start: (id: string, socket: string) => Promise<MachineBridge>, intervalMs = 5000): void {
+    if (this.sessionStart || this.stopped) return;
+    this.sessionStart = start;
+    let failures = 0, previousError: string | undefined;
+    const poll = async () => {
+      try {
+        this.syncSessionMachines(await read());
+        failures = 0; previousError = undefined;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "read failed";
+        if (!this.stopped && previousError !== message) console.error("The herdr sessions on this PC could not be read:", message);
+        previousError = message; failures++;
+      }
+      if (!this.stopped) { this.sessionTimer = setTimeout(poll, Math.min(60_000, intervalMs * 2 ** Math.min(failures, 4))); this.sessionTimer.unref(); }
+    };
+    void poll();
+  }
+  syncSessionMachines(list: readonly FoundHerdrSession[]): void {
+    if (this.stopped) return;
+    const wanted = new Set<string>();
+    let changed = false;
+    for (const found of list) {
+      const id = sessionMachineId(found.session);
+      wanted.add(id);
+      let runtime = this.machines.get(id);
+      if (!runtime) {
+        runtime = this.runtime({ id, name: found.label, kind: "session", enabled: true, state: "disconnected", error: null, snapshot: null });
+        runtime.session = { socket: found.socket_path };
+        this.machines.set(id, runtime);
+        changed = true;
+        void this.reconnect(runtime);
+      } else if (runtime.session!.socket !== found.socket_path) {
+        // the same name under another herdr folder: its server starts again on that socket
+        this.disconnect(runtime);
+        runtime.session = { socket: found.socket_path };
+        void this.reconnect(runtime);
+      }
+    }
+    for (const [id, runtime] of this.machines) {
+      if (runtime.machine.kind !== "session" || wanted.has(id)) continue;
+      runtime.machine.enabled = false; this.disconnect(runtime);
+      this.machines.delete(id);
+      changed = true;
+    }
+    if (changed) this.emit();
+  }
   private mayConnect(runtime: Runtime): boolean {
     const machine = runtime.machine;
     return !machine.herdr_profile_id || !!machine.target && this.profileState.connectionApproved(machine.herdr_profile_id, machine.target);
@@ -609,14 +663,14 @@ export class MachineManager {
     const own = this.serverId?.();
     for (const runtime of this.machines.values()) {
       runtime.machine.runtime = runtime.machine.state === "connected" && runtime.machine.herdr ? runtime.machine.herdr.runtime ?? "herdr" : undefined;
-      if (runtime.machine.kind !== "hc") runtime.machine.ovis_update = this.updateOffer(runtime);
+      if (!foundPc(runtime.machine)) runtime.machine.ovis_update = this.updateOffer(runtime);
     }
     return [own ? { ...this.local, server_id: own } : this.local, ...[...this.machines.values()].map((r) => r.machine)];
   }
   private updateOffer(runtime: Runtime): PcUpdateOffer | null {
     const machine = runtime.machine;
     // a disabled PC is not this app's to touch: updating it would connect it again (setup enables what it connects)
-    if (machine.kind === "hc" || !machine.enabled) return null;
+    if (foundPc(machine) || !machine.enabled) return null;
     if (machine.state === "connected") {
       if (!runtime.ownOffer) return null;
       const offer = { ...runtime.ownOffer, revision: runtime.offerRevision ?? null };
@@ -764,7 +818,7 @@ export class MachineManager {
    */
   private persist(last?: "relay" | "address"): void {
     for (const kind of ["relay", "address"] as const) if (kind !== last) this.persistApart(kind);
-    const owned = [...this.machines.values()].filter(({ machine }) => !machine.herdr_profile_id && machine.kind !== "hc").map(({ machine }) => machine);
+    const owned = [...this.machines.values()].filter(({ machine }) => !machine.herdr_profile_id && !foundPc(machine)).map(({ machine }) => machine);
     const data: StoredMachine[] = owned.filter((m) => m.kind !== "relay" && m.kind !== "address").map((m) => ({ id: m.id, name: m.name, target: m.target!, ...(m.server_id ? { server_id: m.server_id } : {}), enabled: m.enabled, snapshot: m.snapshot }));
     const text = JSON.stringify(data);
     // the PCs' registrations are written last: a save that fails before them leaves them as they were on disk, so a
@@ -809,7 +863,7 @@ export class MachineManager {
     if (!runtime) throw new Error("PC not found");
     if (runtime.machine.kind === "relay") throw new Error(RELAY_PC_UPDATES);
     if (runtime.machine.kind === "address") throw new Error(ADDRESS_PC_UPDATES);
-    if (runtime.machine.kind === "hc") throw new Error(HC_MACHINE_MANAGED);
+    if (foundPc(runtime.machine)) throw new Error(foundPcRefusal(runtime.machine));
     // its own Ovis updating itself: a bridge update would disconnect it and take over its progress
     if (runtime.ownJob) throw new PcUpdateRefused("This PC is already updating.");
     if (!this.mayConnect(runtime)) throw new MachineActionRequired("Connect this machine first", "connect");
@@ -1076,7 +1130,7 @@ export class MachineManager {
     if (request.machine_id && !existing) throw new Error("PC not found");
     if (existing?.machine.kind === "relay") throw new Error(RELAY_PC_UPDATES);
     if (existing?.machine.kind === "address") throw new Error(ADDRESS_PC_UPDATES);
-    if (existing?.machine.kind === "hc") throw new Error(HC_MACHINE_MANAGED);
+    if (existing && foundPc(existing.machine)) throw new Error(foundPcRefusal(existing.machine));
     if (existing && [...this.jobs.values()].some((j) => j.public.machine_id === existing.machine.id && !["connected", "failed", "cancelled"].includes(j.public.phase))) throw new Error("A connection job for this PC is already running");
     if ([...this.jobs.values()].some((job) => (!TERMINAL.has(job.public.phase) || job.closing) && samePc(job.public.target, target))) throw new Error("This app is already connecting to this PC; wait for that to finish, or cancel it.");
     const id = randomUUID();
@@ -1899,7 +1953,7 @@ export class MachineManager {
     const endpoint = runtime.endpoint;
     const generation = runtime.generation;
     try {
-      if ((runtime.tunnel || runtime.forward || runtime.hc) && !runtime.machine.herdr) {
+      if ((runtime.tunnel || runtime.forward || runtime.hc || runtime.session) && !runtime.machine.herdr) {
         await this.readRelayHerdr(runtime, endpoint, generation);
         if (generation !== runtime.generation || this.stopped) return;
       }
@@ -1989,7 +2043,7 @@ export class MachineManager {
       this.emit({ type: "machine-message", machine_id: runtime.machine.id, message });
       if (["pane-status", "pane-exited", "session-changed"].includes(message.type)) void this.refresh(runtime).catch((e) => this.lost(runtime, generation, e));
     };
-    ws.onclose = () => this.lost(runtime, generation, new Error(runtime.tunnel ? "Relay connection to this PC was lost" : runtime.forward ? "Connection to this PC was lost" : runtime.hc ? "This machine's server connection was lost" : "SSH bridge connection interrupted"));
+    ws.onclose = () => this.lost(runtime, generation, new Error(runtime.tunnel ? "Relay connection to this PC was lost" : runtime.forward ? "Connection to this PC was lost" : runtime.hc || runtime.session ? "This machine's server connection was lost" : "SSH bridge connection interrupted"));
     ws.onerror = () => ws.close();
   }
   private tunnelOptions(runtime: Runtime, generation: number): Parameters<typeof openRelayPcTunnel>[2] {
@@ -2051,13 +2105,13 @@ export class MachineManager {
     runtime.triedAt = this.now();
     runtime.machine.state = "reconnecting"; runtime.machine.action_required = null; this.emit();
     const generation = runtime.generation;
-    if (runtime.hc) {
-      const hc = runtime.hc;
+    const owned = runtime.hc ?? runtime.session;
+    if (owned) {
       try {
         delete runtime.machine.herdr;
-        const bridge = await this.hcStart!(hc);
-        if (generation !== runtime.generation || this.stopped || runtime.hc !== hc) { bridge.stop(); return; }
-        hc.bridge = bridge; runtime.endpoint = bridge.endpoint;
+        const bridge = await (runtime.hc ? this.hcStart!(runtime.hc) : this.sessionStart!(runtime.machine.id, runtime.session!.socket));
+        if (generation !== runtime.generation || this.stopped || (runtime.hc ?? runtime.session) !== owned) { bridge.stop(); return; }
+        owned.bridge = bridge; runtime.endpoint = bridge.endpoint;
         void bridge.exited.then(() => this.lost(runtime, generation, new Error("This machine's server stopped")));
         await this.observe(runtime); this.emit();
       } catch (e) { this.lost(runtime, generation, e); }
@@ -2123,7 +2177,8 @@ export class MachineManager {
     runtime.ssh?.close(); runtime.ssh = undefined; runtime.endpoint = undefined;
     runtime.tunnel?.close(); runtime.tunnel = undefined; delete runtime.machine.route;
     runtime.forward?.close(); runtime.forward = undefined;
-    if (runtime.hc?.bridge) { runtime.hc.bridge.stop(); runtime.hc.bridge = undefined; }
+    const owned = runtime.hc ?? runtime.session;
+    if (owned?.bridge) { owned.bridge.stop(); owned.bridge = undefined; }
     runtime.verification?.abort.abort(); runtime.verification = undefined;
     runtime.acceptedEpoch = undefined; runtime.candidate = undefined; runtime.candidateRun = undefined; delete runtime.machine.source_boot_id;
     runtime.move = undefined;
@@ -2222,7 +2277,7 @@ export class MachineManager {
     const runtime = this.machines.get(id);
     if (!runtime) throw new Error("PC not found");
     if (runtime.machine.herdr_profile_id) throw new Error("Rename or disable this machine in herdr");
-    if (runtime.machine.kind === "hc") throw new Error(HC_MACHINE_MANAGED);
+    if (foundPc(runtime.machine)) throw new Error(foundPcRefusal(runtime.machine));
     if (patch.enabled !== undefined && typeof patch.enabled !== "boolean") throw new Error("enabled must be boolean");
     if (patch.name !== undefined) { if (typeof patch.name !== "string" || !patch.name.trim() || patch.name.length > 100) throw new Error("Enter a PC name (1–100 characters)"); runtime.machine.name = patch.name.trim(); }
     if (patch.enabled !== undefined) {
@@ -2240,7 +2295,7 @@ export class MachineManager {
     const runtime = this.machines.get(id);
     if (!runtime) throw new Error("PC not found");
     if (runtime.machine.herdr_profile_id) throw new Error("Remove this machine in herdr");
-    if (runtime.machine.kind === "hc") throw new Error(HC_MACHINE_MANAGED);
+    if (foundPc(runtime.machine)) throw new Error(foundPcRefusal(runtime.machine));
     runtime.machine.enabled = false; this.disconnect(runtime);
     for (const [jobId, job] of this.jobs) if (job.public.machine_id === id) this.cancelJob(jobId);
     this.dropUpdate(runtime);
@@ -2516,7 +2571,7 @@ export class MachineManager {
     return runtime.machine;
   }
   stop(): void {
-    this.stopped = true; clearTimeout(this.discoveryTimer); clearTimeout(this.hcTimer); clearInterval(this.localTimer); clearTimeout(this.saveTimer);
+    this.stopped = true; clearTimeout(this.discoveryTimer); clearTimeout(this.hcTimer); clearTimeout(this.sessionTimer); clearInterval(this.localTimer); clearTimeout(this.saveTimer);
     for (const id of this.jobs.keys()) this.cancelJob(id);
     this.installer.stop();
     for (const runtime of this.machines.values()) { runtime.ownJob?.abort.abort(); this.disconnect(runtime); }

@@ -56,6 +56,8 @@ export const MACHINES_JA: Record<string, string> = {
   "Remove PC…": "PC を削除…",
   "over SSH": "SSH 経由",
   "by its address": "アドレス経由",
+  "on this PC": "この PC 上",
+  "Another herdr session on this PC. It is listed while that session runs.": "この PC 上の別の herdr セッションです。そのセッションが動いている間、ここに表示されます。",
   "through the relay": "リレー経由",
   "No saved sessions": "保存されたセッションはありません",
   "Updating the bridge": "ブリッジを更新しています",

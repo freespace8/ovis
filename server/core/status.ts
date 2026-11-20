@@ -31,7 +31,9 @@ import { createGjcStatus, gjcPanes, readOmoSnapshot, reconcileProviderStatus } f
 import { resolveGrokStore } from "../grok-store.ts";
 import { createLettaStatus, lettaPanes, lettaTitleStatus } from "../letta-status.ts";
 import type { HerdrMachineProfile } from "../herdr-profiles.ts";
-import { paneGet, paneProcessInfo, sessionSnapshot } from "../herdr/client.ts";
+import { herdrSocketPath, paneGet, paneProcessInfo, sessionSnapshot } from "../herdr/client.ts";
+import type { FoundHerdrSession } from "../../shared/machines.ts";
+import { otherSessions, startSessionBridge } from "../session-bridge.ts";
 import { resolveAgent } from "../pane-context.ts";
 import { launchedAgents } from "../launched-agents.ts";
 import { bridgeAgentNews, MachineManager } from "../machines.ts";
@@ -82,6 +84,8 @@ export function createStatusHub<Owner, Lease>({ options, devices, preferences, c
     tailnetPcs?: TailnetPcsOptions;
     sshCandidates?: SshCandidatesOptions;
     herdrProfiles?: () => Promise<HerdrMachineProfile[]>;
+    /** the herdr sessions of this account running on this PC, each served as a machine of its own (server/session-bridge.ts); not set, none is */
+    herdrSessions?: { read: () => Promise<FoundHerdrSession[]>; pollMs?: number };
     alertTiming?: Partial<AlertTiming>;
     serverId?: () => string | undefined;
     pushLoopbackHttp?: boolean;
@@ -503,6 +507,11 @@ export function createStatusHub<Owner, Lease>({ options, devices, preferences, c
   const machines = options.machines === false ? null : new MachineManager(options.stateDir ?? defaultStateDir(), push, completions, clientSnapshot, { restoreReplaced: () => preferences.get().settings.restoreReplacedServer === true, bootId: options.orderSequence?.epoch, localFinishEpoch: () => finishes.epoch, relaySocket: options.relayPcSocket, relayDirectSocket: options.relayPcDirectSocket, serverId: options.serverId, tailnet: options.tailnetPcs, sshCandidates: options.sshCandidates, ...(options.pcUpdateTimings ? { ownUpdate: options.pcUpdateTimings } : {}) });
   if (machines && options.herdrProfiles) machines.watchHerdrProfiles(options.herdrProfiles);
   if (machines && capabilities().machines) machines.watchHcMachines(() => listHcMachines(coreConnection()), (machine) => startMachineBridge(machine, options.stateDir ?? defaultStateDir()));
+
+  if (machines && options.herdrSessions && !capabilities().machines) {
+    machines.watchHerdrSessions(async () => otherSessions(await options.herdrSessions!.read(), herdrSocketPath()),
+      (id, socket) => startSessionBridge(id, socket, options.stateDir ?? defaultStateDir()), options.herdrSessions.pollMs);
+  }
 
   const desktopActivity = options.desktopActivity === true ? trackDesktopActivity({
     path: join(options.stateDir ?? defaultStateDir(), DESKTOP_ACTIVITY_FILE),

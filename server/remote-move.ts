@@ -69,6 +69,7 @@ async function startMove(manager: MachineManager, id: string, revision: string):
   if (!machine) return { outcome: "refused", code: "machine_not_found", message: "This PC is not in the list." };
   if (machine.kind === "local") return { outcome: "refused", code: "move_unavailable", message: "Move this PC from Settings > About." };
   if (machine.kind === "hc") return { outcome: "refused", code: "move_unavailable", message: "This PC is a machine of herdr-core: it has no herdr session to move." };
+  if (machine.kind === "session") return { outcome: "refused", code: "move_unavailable", message: "This PC is another herdr session on this computer: move this computer's runtime from Settings > About." };
   const endpoint = manager.endpoint(id);
   if (!endpoint) return { outcome: "refused", code: "machine_offline", message: "This PC is disconnected." };
   let response: Response;

@@ -25,6 +25,14 @@ export const ADDRESS_PC_FAILURES = ["address", "target", "code", "wrong_code", "
 export type AddressPcFailure = typeof ADDRESS_PC_FAILURES[number];
 /** A PC this server is paired with as one of its devices (relay, address): it runs its own Ovis, which it is revoked on. */
 export function pairedPc(machine: Pick<Machine, "kind">): boolean { return machine.kind === "relay" || machine.kind === "address"; }
+/**
+ * The id of the machine for a herdr session on this PC: stable across restarts, from the session's name
+ * (herdr names are 1-64 of letters, digits, `_` and `-`, so the id is safe in a URL and a folder name).
+ * `undefined` is the default session, whose socket sits directly in herdr's folder.
+ */
+export function sessionMachineId(session: string | undefined): string {
+  return session === undefined ? "session-default" : `session-name-${session}`;
+}
 export interface Machine {
   /** Read-only identity inherited from the local herdr catalog. */
   herdr_profile_id?: string;
@@ -32,7 +40,8 @@ export interface Machine {
   name: string;
   /** hc: another machine of this PC's herdr-core (`hc machine add`), reached through that core */
   /** address: another PC's own Ovis added by its https address, paired as a device that drives it */
-  kind: "local" | "ssh" | "relay" | "hc" | "address";
+  /** session: another herdr session of this account on this PC, found while it runs (sessionMachineId) */
+  kind: "local" | "ssh" | "relay" | "hc" | "address" | "session";
   target?: SshTarget;
   /** a PC added through the Ovis relay (no SSH): its relay ID and the relay it is reached through */
   relay?: { server_id: string; relay: string };

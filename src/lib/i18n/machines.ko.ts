@@ -56,6 +56,8 @@ export const MACHINES_KO: Record<string, string> = {
   "Remove PC…": "PC 제거…",
   "over SSH": "SSH 경유",
   "by its address": "주소로 연결",
+  "on this PC": "이 PC에서",
+  "Another herdr session on this PC. It is listed while that session runs.": "이 PC의 다른 herdr 세션입니다. 해당 세션이 실행되는 동안 여기에 표시됩니다.",
   "through the relay": "릴레이 경유",
   "No saved sessions": "저장된 세션이 없습니다",
   "Updating the bridge": "브리지 업데이트 중",
