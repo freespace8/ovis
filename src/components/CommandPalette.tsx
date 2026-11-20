@@ -31,6 +31,7 @@ import { useFocusTrap } from "../lib/useFocusTrap.ts";
 import { localPageAddress, panelUrl } from "../lib/webPanel.ts";
 import { paneCovered } from "../lib/panePresentation.ts";
 import { useSheetSwipe } from "../lib/sheets.ts";
+import { linkMachine } from "../lib/transport.ts";
 import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useSessionHistoryOffered } from "../lib/useSessionHistoryOffered.ts";
@@ -335,8 +336,11 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
     ] satisfies PaletteAction[]),
     ...(actions.inboxMode ? [{ id: "inbox-mode", label: t(actions.inboxMode.on ? "Back to Ovis" : "Open agent inbox"), icon: actions.inboxMode.on ? OvisMark : Inbox, run: actions.inboxMode.go }] satisfies PaletteAction[] : []),
     { id: "theme", label: t("Toggle theme"), icon: SunMoon, run: actions.toggleTheme },
-    { id: "settings", label: t("Settings"), icon: Settings, shortcut: "settings", run: actions.openSettings },
-    { id: "add-pc", label: t("Add PC"), icon: Monitor, run: () => actions.openAddPc() },
+    // a private link's page has neither: it opens one session
+    ...(linkMachine() === null ? [
+      { id: "settings", label: t("Settings"), icon: Settings, shortcut: "settings", run: actions.openSettings },
+      { id: "add-pc", label: t("Add PC"), icon: Monitor, run: () => actions.openAddPc() },
+    ] satisfies PaletteAction[] : []),
     ...(actions.enableNotifications ? [{ id: "notifications", label: t("Enable notifications"), icon: Bell, run: actions.enableNotifications }] : []),
     ...(actions.openFiles ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: actions.openFiles }] : []),
     ...(online ? [{ id: "browse-folders", label: t("Browse folders"), icon: FolderSearch, keepOpen: true, run: () => browseTo(browseStart ?? home ?? "~") }] : []),
@@ -345,6 +349,7 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
   ], [actions, overDialog, surface, splitPane, zoomPane, tabPanes, zoom, view, t, selectedPaneId, inboxMode, tabShown, renameOffered, worktreeHere, historyHere, online, browseTo, browseStart, home]);
 
   const settingsActions = useMemo(() => {
+    if (linkMachine() !== null) return [];
     const icons = new Map(PAGES.map(({ id, icon }) => [id, icon]));
     const entries = settingsPageEntries(t);
     const pageLabel = new Map(entries.filter((entry) => entry.section === undefined).map((entry) => [entry.id, entry.label]));

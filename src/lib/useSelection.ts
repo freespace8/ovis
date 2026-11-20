@@ -99,7 +99,7 @@ export function useSelectionMark({ selectedMachineId, selectedPaneId }: { select
   return { selectionRef, movingPanes };
 }
 
-export function useSelectTarget({ selectedMachineId, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setDrawerOpen, setOutputStopped, setNotificationViewTarget, setTerminalPeek, pendingLink, pendingFile, setLinkLanded, selectionHint, selectionSince, rosterSeq, snapshot, selectedMachine, selectedPaneId, setHeaderNote, linkTick, movingPanes, onPick, onLinkMiss }: {
+export function useSelectTarget({ selectedMachineId, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setDrawerOpen, setOutputStopped, setNotificationViewTarget, setTerminalPeek, pendingLink, pendingFile, setLinkLanded, selectionHint, selectionSince, rosterSeq, snapshot, selectedMachine, selectedPaneId, setHeaderNote, linkTick, movingPanes, onPick, onLinkMiss, linkedMachine }: {
   selectedMachineId: string;
   setConnected: Dispatch<SetStateAction<boolean>>;
   setConnectedBefore: Dispatch<SetStateAction<boolean>>;
@@ -124,6 +124,8 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
   movingPanes: RefObject<Set<string>>;
   onPick?: (paneId: string | null) => void;
   onLinkMiss?: () => void;
+  /** a private link's machine: the page opens it, whatever this browser viewed last */
+  linkedMachine?: string;
 }) {
   const onPickRef = useRef(onPick); onPickRef.current = onPick;
   const onLinkMissRef = useRef(onLinkMiss); onLinkMissRef.current = onLinkMiss;
@@ -153,6 +155,9 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
     selectionSince.current = rosterSeq.current;
   }, []);
   const selectTargetRef = useRef(selectTarget); selectTargetRef.current = selectTarget;
+  useEffect(() => {
+    if (linkedMachine !== undefined && linkedMachine !== selectedMachineRef.current) selectTarget(linkedMachine, null);
+  }, [linkedMachine, selectTarget]);
   const lastSeen = useRef<{ machine: string; pane: string; roster: NonNullable<typeof snapshot>; previous: string | null } | null>(null);
   useEffect(() => {
     // An offline PC's cached roster cannot invalidate a selection.

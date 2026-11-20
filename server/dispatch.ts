@@ -10,7 +10,9 @@ import type { OrderSequence } from "./order-sequence.ts";
 import type { HealthAuth, ObservedIngress, SecuritySummary, SessionSnapshot } from "../shared/protocol.ts";
 import { DEFAULT_PORT } from "../shared/protocol.ts";
 import { LOCAL_MACHINE, type Machine } from "../shared/machines.ts";
-import { authClient, deviceAuthorizationValue, deviceCookieValue, bearerMatches, handleAuthRequest, isAuthenticated, isSecureRequest, parseCookies, presentedToken, presentedTokenHeld, recordPresentedTokenFailure, requiresAuth, unauthorizedJson } from "./auth.ts";
+import { handleSessionLinksRequest, handleSessionLinkVisit, onlyMachine, type SessionLinks } from "./session-links.ts";
+import { SESSION_LINKS_PATH, sessionLinkAllows } from "../shared/session-links.ts";
+import { authClient, deviceAuthorizationValue, deviceCookieValue, bearerMatches, handleAuthRequest, isAuthenticated, isSecureRequest, LINK_COOKIE, parseCookies, presentedToken, presentedTokenHeld, recordPresentedTokenFailure, requiresAuth, unauthorizedJson } from "./auth.ts";
 import { bindScope, cameThroughProxy, decideAccess, decideMachineAccess, forwardingHeaders, inTailnet, isLoopbackAddress, isServeOwnerRequest, lanExposed, machineForwardingHeaders, observedIngress, ownerAccess } from "./access.ts";
 import { type DeviceStore, handleDeviceRequest, newStreamKey, streamCookie, streamKeys, type DeviceMatch } from "./devices.ts";
 import { handlePreferencesRequest, type PreferenceStore } from "./preferences.ts";
@@ -102,6 +104,7 @@ export interface RequestServices {
   readonly bridgeToken: string;
   readonly bootId: string;
   readonly devices: DeviceStore;
+  readonly sessionLinks: SessionLinks;
   readonly accountMailbox: AccountMailbox;
   readonly accountIntroductions: AccountIntroductions;
   readonly accountHolds: AccountHolds;
@@ -198,6 +201,8 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
   if (accountRefusal !== null) return accountRefusal;
   // the machine profile on TCP: its liveness for every caller; no credential or header of the request is read
   if (options.profile === "machine" && relayPeer === undefined && ctx.ownerSocket !== true) return machineTcpAnswer(request, pathname);
+  // a private link needs no other credential: it is one
+  if (options.profile !== "machine" && relayPeer === undefined && pathname.startsWith("/s/")) return handleSessionLinkVisit(request, pathname, ctx.services.sessionLinks);
   // an act waiting for this PC's screen is answered there alone (server/account/local-confirm.ts): every caller of a
   // route gets the same refusal, before anything about it is decided
   if (/^\/api\/account\/local-confirm(?:\/|$)/.test(pathname) && ctx.services.localConfirms !== undefined) {
@@ -260,8 +265,10 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     if (portalProven || (portalShape && loopback && request.headers.get("x-forwarded-proto") === "https" && (options.portal?.serves(requestHost) ?? false))) return "portal";
     return observedIngress({ ...requestShape, ...identity, peerKnown: ip !== null, forwardingHeaders: forwardingHeaders(request.headers) });
   };
+  const linkToken = relayPeer === undefined ? parseCookies(request.headers.get("cookie")).get(LINK_COOKIE) : undefined;
   let access = options.profile === "machine" ? decideMachineAccess({ relayPeer, ownerSocket: ctx.ownerSocket === true, host: requestHost, forwarded: machineForwardingHeaders(request.headers) }) : decideAccess({
     relayPeer,
+    link: linkToken === undefined ? null : ctx.services.sessionLinks.match(linkToken),
     ...requestShape,
     host: requestHost,
     tokenMatched,
@@ -303,7 +310,13 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
   const lockSignal = ctx.services.lockSignal;
   const survivesLock = access.level === "full" && (bridgeAuthorized || (access.device !== undefined && access.via !== "local")
     || lockBoundary(access, { locked: true, strict: false }, { localProof: false, ownProgram: ctx.ownerSocket === true, originOf: (rowId) => devices.originOf(rowId) }).level === "full");
-  const untilLock = lockSignal !== undefined && !survivesLock ? untilLockFrom(lockSignal) : undefined;
+  const lockEnds = lockSignal !== undefined && !survivesLock ? untilLockFrom(lockSignal) : undefined;
+  // a private link's connections and streams end when the link is revoked, as a lock ends what it refuses
+  const holdsLink = access.level === "full" ? access.link : undefined;
+  const untilLock = holdsLink === undefined ? lockEnds : (close: () => void) => {
+    const stops = [ctx.services.sessionLinks.onRevoke(holdsLink.id, close), lockEnds?.(close)];
+    return () => { for (const stop of stops) stop?.(); };
+  };
 
   // on the owner's socket a request naming another host or showing a proxy gets nothing, its health included
   if (options.profile === "machine" && access.level !== "full") return machineUnauthorized(pathname);
@@ -313,6 +326,12 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     // a script's Bearer guess is told to wait; a browser's cookie gets the usual 401 and its sign-in form
     if (presented === "held" && pathname !== "/ws" && request.headers.has("authorization")) return presentedTokenHeld(client);
     return pathname === "/ws" ? new Response("unauthorized", { status: 401 }) : unauthorizedJson(access.level === "none" ? access.reason : "token_required");
+  }
+
+  // a private link opens its one machine and nothing else (shared/session-links.ts)
+  if (access.level === "full" && access.link !== undefined && !sessionLinkAllows(request.method, url, access.link.machine_id)) {
+    setRequestRoute("link-refusal");
+    return jsonResponse({ error: { code: "link_scope", message: "This private link opens one herdr session only" } }, 403);
   }
 
   if (options.profile === "machine" && machineRouteRestricted(pathname, request.method)) {
@@ -514,7 +533,10 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       const endsWith = deviceId ? (close: () => void) => devices.onRevoke(deviceId, close) : openAccess ? (close: () => void) => devices.endWithGate(close) : portalRecheckMs !== undefined ? (close: () => void) => { const timer = setTimeout(close, portalRecheckMs); return () => clearTimeout(timer); } : undefined;
       // and with a lock, when what let it in is a grant the lock refuses
       const ends = untilLock === undefined ? endsWith : (close: () => void) => { const stops = [untilLock(close), endsWith?.(close)]; return () => { for (const stop of stops) stop?.(); }; };
-      const response = await handleMachineRequest(request, machines, ends, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ownerAccess(access), ctx.services.safetyLog !== null, devices);
+      // a private link sees its one machine, and none of what this server's browsers share
+      const response = holdsLink
+        ? await handleMachineRequest(request, onlyMachine(machines, holdsLink.machine_id), ends, undefined, readOnly, herdrSidebar, undefined, undefined, ctx.relayBodyBudget, false, false)
+        : await handleMachineRequest(request, machines, ends, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ownerAccess(access), ctx.services.safetyLog !== null, devices);
       response.headers.set("cache-control", "no-store");
       if (issuedKey !== null && response.ok) response.headers.append("set-cookie", streamCookie(issuedKey, isSecureRequest(request)));
       return response;
@@ -561,10 +583,10 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     const keys = issuedKey === null ? presentedKeys : [issuedKey];
     if (issuedKey !== null) headers.append("set-cookie", streamCookie(issuedKey, isSecureRequest(request)));
     const openAccess = access.level === "full" && access.via === "open";
-    const machineEvents = useMachineEvents ? {
+    const machineEvents = !useMachineEvents ? undefined : holdsLink ? { manager: onlyMachine(machines, holdsLink.machine_id), herdrSidebar } : {
       manager: machines, preferences, herdrSidebar, seen,
       pairings: machinePairingEvents(ctx, access, keys),
-    } : undefined;
+    };
     const upgraded = ctx.upgrade(request, { headers, data: connectionData({ machineEvents, localRoster, deviceId, ...(ctx.peer.kind === "relay" && ctx.peer.device.id === deviceId && ctx.peer.key ? { provedKey: ctx.peer.key } : {}), readOnly, ...(openAccess && !bridgeAuthorized ? { open: true } : {}), bridge: bridgeAuthorized, ...(surface ? { surface } : {}), ...(ingress === undefined ? {} : { ingress }), ...recheck, ...(untilLock ? { untilLock } : {}) }) });
     if (upgraded) return undefined;
     return new Response("websocket upgrade required", { status: 426 });
@@ -585,6 +607,14 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
   if (pathname === "/api/devices/pending" || pathname.startsWith("/api/devices/pending/")) {
     const pendingRedemptions = ctx.services.pendingRedemptions;
     if (pendingRedemptions !== undefined) return handlePendingRequest(request, pathname, pendingRedemptions, access);
+  }
+  // private links are standing access to a session, so only the owner makes and revokes them (never a link itself)
+  if (pathname === SESSION_LINKS_PATH || pathname.startsWith(`${SESSION_LINKS_PATH}/`)) {
+    if (!ownerAccess(access)) {
+      setRequestRoute("owner-refusal");
+      return jsonResponse({ error: { code: "owner_only", message: "Private links are made from this PC itself, or from a device paired with it that drives." } }, 403);
+    }
+    return handleSessionLinksRequest(request, pathname, ctx.services.sessionLinks, () => machines?.list().filter((machine) => machine.kind === "session").map((machine) => machine.id) ?? []);
   }
   if (pathname === "/api/devices" || pathname.startsWith("/api/devices/")) {
     try {
@@ -677,24 +707,26 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     setRequestRoute(pathname);
     const own = ownWindow && ctx.services.lockRoutes !== undefined ? { own_window: true as const } : {};
     const auth: HealthAuth = access.level === "full"
-      ? { required: false, authenticated: true, via: access.via, role: access.role, ...(access.via === "token" && bearerMatches(request, token) ? { bearer: true as const } : {}), ...(access.portal ? { portal: access.portal } : {}), ...own }
+      ? { required: false, authenticated: true, via: access.via, role: access.role, ...(access.via === "token" && bearerMatches(request, token) ? { bearer: true as const } : {}), ...(access.portal ? { portal: access.portal } : {}), ...(access.link ? { link: { machine_id: access.link.machine_id } } : {}), ...own }
       // a window refused at the door of a locked PC is told the PC is locked, never offered a pairing it cannot use (T47, N4)
       : { required: true, authenticated, ...(authenticated ? {} : { reason: ctx.services.safetyLog?.state().locked === true && access.reason === "pairing_required" ? "locked" as const : access.reason }), ...own };
+    // a private link is told nothing of this server's network, relay or protection: it opens one session
+    const visitor = access.level === "full" && access.via === "link";
     // this server is open to the network with no token and nothing paired, told to a client
     // that got in and to nobody else: naming it to an anonymous caller would be
     // reconnaissance, not help. Nothing here changes who is let in (server/access.ts).
     const directCarriers = ctx.services.relay.status().direct?.carriers ?? [];
-    const lan_exposure = access.level !== "full" ? undefined
+    const lan_exposure = access.level !== "full" || visitor ? undefined
       : lanExposed({ hostname, tokenConfigured: token !== "", gated: devices.gated }) ? { host: hostname } : undefined;
     // the relay's direct carrier: on the network, but for devices paired through the relay only, and said in those
     // words. A field of its own: a 0.4.x client takes any lan_exposure for an open server.
-    const direct_exposure = access.level !== "full" || lan_exposure || directCarriers.length === 0 ? undefined
+    const direct_exposure = access.level !== "full" || visitor || lan_exposure || directCarriers.length === 0 ? undefined
       : { host: new URL(directCarriers[0]!.replace(/^ws:/, "http:")).hostname };
     const exposure = { ...(lan_exposure ? { lan_exposure } : {}), ...(direct_exposure ? { direct_exposure } : {}) };
     // what protects this server, for a client that got in (a watching one too) and nobody else;
     // per request, so never stored. The ingress is this request's, proven or `unknown`
     const ingress = requestIngress(true);
-    const security: SecuritySummary | undefined = access.level === "full" ? {
+    const security: SecuritySummary | undefined = access.level === "full" && !visitor ? {
       token_configured: token !== "",
       pairing_gate: devices.error !== null || devices.failsClosed ? "unavailable" : devices.gated ? "closed" : "open",
       bind_scope: bindScope(hostname),
@@ -702,12 +734,12 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       public_exposure: ingress === "funnel" ? "observed" : "unknown",
     } : undefined;
     const securityHeaders: Record<string, string> = security ? { "cache-control": "no-store" } : {};
-    const relay = access.level === "full" ? { relay: ctx.services.relay.status() } : {};
-    const serverId = access.level === "full" && access.via !== "open" ? ctx.services.relay.serverId() : undefined;
+    const relay = access.level === "full" && !visitor ? { relay: ctx.services.relay.status() } : {};
+    const serverId = access.level === "full" && access.via !== "open" && !visitor ? ctx.services.relay.serverId() : undefined;
     // what this PC has of the Herdr app's runtime, for Settings: never waited for, no path in it.
     // Only a driving owner is told: a session name can name a project, which a watching device, a
     // stranger on an open install or a Portal visitor (who may not switch it) has no need to read
-    const owner = access.level === "full" && access.role === "drive" && access.via !== "open" && access.via !== "portal";
+    const owner = ownerAccess(access);
     // the connection server that reaches this PC with its bridge token shows its move badge from them
     const herdr_runtime = owner || bridgeAuthorized ? options.runtimeService?.facts() : undefined;
     // the devices the owner is shown apart (`ovis status`): outside the account, and members on their own word

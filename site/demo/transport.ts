@@ -1,4 +1,5 @@
 import { NO_AGENT_MESSAGE } from "../../shared/submit-outcome.ts";
+import type { SessionLink, SessionLinkCreated } from "../../shared/session-links.ts";
 import { resolveHerdrKeys } from "../../shared/herdr-keys.ts";
 import type { AgentIntegration, AgentStatus, CommandForm, CommandOutcome, ConversationTurn, DevicePairedEvent, DevicesRevokedAll, HealthAuth, IntegrationsResponse, Machine, MachineEvent, OmoActivity, OmoTask, PairedDevice, PairingCode, PaneBackgroundAgentDetail, PaneDirection, PaneFindMatch, PaneFindRequest, PaneMoved, PanePlan, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PendingMessage, PlanStep, PluginActionResult, PluginActions, PluginActionsResponse, PortalStatus, RelayStatus, SecuritySummary, ServerMessage, SessionSnapshot, SlashCommand, TabMoved, TabMovedToWorkspace, UsageReport, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeInventory, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../../shared/protocol.ts";
 import type { PushSubscriptionStatus, RepoBranchComparison, RepoDiffFile, RepoDiffFileList, RepoDiffFilePatch, RepoDiffRefs, RepoDiffRepository, RepoDiffScope, SessionHistoryAgent, SessionHistoryResponse, SessionResumeResponse } from "../../shared/protocol.ts";
@@ -1011,6 +1012,7 @@ if (PAIRING_HELD) (globalThis as { herdrDemoReleasePairing?: () => boolean }).he
   return release !== undefined;
 };
 const deviceListHeld = DEVICE_STATE === "slow" ? new Promise<void>((resolve) => { (globalThis as { herdrDemoReleaseDevices?: () => void }).herdrDemoReleaseDevices = resolve; }) : null;
+const demoLinks: SessionLink[] = [];
 const demoDevices: PairedDevice[] = DEVICE_STATE === "empty" ? [] : [
   { id: "6f1c2a9d4b7e8503", label: "Pixel 9", role: "drive", created_at: ago(41 * 24 * 60), last_seen_at: ago(3), current: DEVICE_STATE === "watch" },
   { id: "0b8e7d6c5a493f21", label: "iPad", role: "drive", created_at: ago(12 * 24 * 60), last_seen_at: ago(26 * 60), current: false },
@@ -1128,6 +1130,21 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
       else setTimeout(demoDevicePairs, DEVICE_PAIRS_AFTER_MS);
     }
     return json(startDemoPairing(), 200, { "cache-control": "no-store" });
+  }
+  if (path === "/api/session-links") {
+    if (method === "POST") {
+      const machine_id = (JSON.parse(String(init?.body ?? "{}")) as { machine_id?: string }).machine_id ?? "local";
+      const made: SessionLinkCreated = { id: `demo-link-${demoLinks.length + 1}`, machine_id, created_at: new Date().toISOString(), url: `${location.origin}/s/${"demo".repeat(10)}abc` };
+      demoLinks.push({ id: made.id, machine_id, created_at: made.created_at });
+      return json(made, 201, { "cache-control": "no-store" });
+    }
+    return json(demoLinks, 200, { "cache-control": "no-store" });
+  }
+  if (path.startsWith("/api/session-links/") && method === "DELETE") {
+    const index = demoLinks.findIndex((link) => link.id === path.slice("/api/session-links/".length));
+    if (index === -1) return error("not_found", "no such link", 404);
+    demoLinks.splice(index, 1);
+    return json({ ok: true });
   }
   if (path === "/api/account/status" && ACCOUNT_MEMBER) return json({ account: "demo-account", unlinked: [], removals: [], adds: [], blocked: [] }, 200, { "cache-control": "no-store" });
   if (DEVICE_STATE !== null) {

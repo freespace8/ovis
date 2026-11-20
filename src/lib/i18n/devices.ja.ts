@@ -35,6 +35,7 @@ export const DEVICES_JA: Record<string, string> = {
   "This is a paired device.": "ペアリング済みのデバイスです。",
   "You are in with the access token.": "アクセストークンでアクセスしています。",
   "You are in through Portal's sign-in.": "Portal のサインインでアクセスしています。",
+  "You are in through a private link to one herdr session.": "herdr セッション 1 つへのプライベートリンクでアクセスしています。",
   "This browser is in only because nothing is paired yet: from anywhere that can reach this address, so would anyone.": "まだ何もペアリングされていないため、このブラウザーはアクセスできています。このアドレスに到達できる場所からなら、誰でも同様にアクセスできます。",
   "Pairing a device turns on the app's own sign-in, on top of any proxy sign-in: other browsers then need pairing or the access token. If your proxy already signs people in, set OVIS_TOKEN and have the proxy send it instead.": "デバイスをペアリングすると、プロキシのサインインとは別にアプリ自身のサインインが有効になり、他のブラウザーではペアリングかアクセストークンが必要になります。プロキシですでにサインインさせている場合は、OVIS_TOKEN を設定してプロキシに代わりに送らせてください。",
   "Pair this device now": "今すぐこのデバイスをペアリング",

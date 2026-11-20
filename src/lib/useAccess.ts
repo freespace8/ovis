@@ -4,6 +4,7 @@ import type { AccessRefusal, HealthAuth, SecuritySummary } from "../../shared/pr
 import { fetchBridgeHealth, pairDevice } from "./api.ts";
 import { deviceLabel, takePairCode } from "./phone.ts";
 import { canSignOut as authEndsHere } from "./signOut.ts";
+import { setLinkMachine } from "./transport.ts";
 import { sameData } from "./useMachineRoster.ts";
 import { addServedFonts } from "./userFonts.ts";
 
@@ -42,7 +43,7 @@ export function useAccessState(fonts: { readonly ui: string; readonly chat: stri
     const read = ++started.current;
     const newest = () => { if (read < settled.current) return false; settled.current = read; return true; };
     try {
-      const next = await fetchBridgeHealth(); setLocked(next.auth.required && !next.auth.authenticated); setLockReason(next.auth.reason ?? null); setAuth(next.auth);
+      const next = await fetchBridgeHealth(); setLinkMachine(next.auth.link?.machine_id ?? null); setLocked(next.auth.required && !next.auth.authenticated); setLockReason(next.auth.reason ?? null); setAuth(next.auth);
       if (next.auth.authenticated) setPairingSucceeded(false);
       // the bridge scope answers without herdr; a server that sends no facts is older, never "fine"
       const summary = next.security;

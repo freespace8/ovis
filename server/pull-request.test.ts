@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceStore } from "./devices.ts";
 import { createServer } from "./index.ts";
-import { MACHINE_PROXY_PATH } from "./machine-api.ts";
+import { MACHINE_PROXY_PATH } from "../shared/machines.ts";
 import { PullRequestError, mergePullRequest, pullRequestLog, pullRequestView } from "./pull-request.ts";
 import { PULL_REQUEST_LOG_LINES } from "../shared/pull-request.ts";
 

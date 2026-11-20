@@ -3,7 +3,9 @@ import type { DevicePairedEvent, DeviceRemovedEvent, Machine, MachineEvent, Pend
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { ApiError, authenticate, fetchMachines, observePaneSessions, paneSessionEvents, paneSessionsMoving, verifySourceBoot } from "./api.ts";
 import { passingFolder, recentDirectories } from "./recent-directories.ts";
-import { keepMachineEvents } from "./machineEventStream.ts";
+import { keepMachineEvents, type MachineEventSocket } from "./machineEventStream.ts";
+import { linkMachine } from "./transport.ts";
+import { LOCAL_MACHINE } from "../../shared/machines.ts";
 import { MachineSessionRegistry } from "./machineSession.ts";
 import { receiveSeen } from "./seenFinishes.ts";
 import { withPairedNotice } from "./pairedNotices.ts";
@@ -25,6 +27,16 @@ import { displayPaneTitle } from "../components/Sidebar.tsx";
 import { useHeaderConnection, type HeaderConnection } from "./headerConnection.ts";
 import type { usePreferencesSync } from "./preferencesSync.ts";
 import type { useAlertSignals } from "./useAlertSignals.ts";
+
+/**
+ * A link to another session may not open this server's own terminal socket, which is where the roster usually
+ * rides: it takes the roster over SSE from the start, with no socket to wait on.
+ */
+const eventsOverSse: MachineEventSocket = {
+  on: () => () => {}, onDisconnect: () => () => {}, connect: () => {}, setMachineEvents: () => {},
+  machineEventsAvailable: false, outputStopped: false,
+};
+const linkedElsewhere = (): boolean => linkMachine() !== null && linkMachine() !== LOCAL_MACHINE;
 
 const POLL_MS = 5000;
 const STREAM_BACKSTOP_MS = 30_000;
@@ -384,7 +396,7 @@ export function useRosterEvents({ onPaneMoved, machineSessions, locked, onRoster
         scheduleRefetch();
       }
     };
-    const stop = keepMachineEvents(machineSessions.get("local").socket, {
+    const stop = keepMachineEvents(linkedElsewhere() ? eventsOverSse : machineSessions.get("local").socket, {
       opened: () => { onRosterStream("opened"); preferencesResubscribedRef.current(); },
       // lost (the browser reconnects by itself): a shared-settings save waits for that instead of retrying
       lost: () => { onRosterStream("lost"); preferencesDisconnectedRef.current(); },

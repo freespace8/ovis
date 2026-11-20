@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "bun:test";
 import { apiFetch } from "./api-request-id.ts";
 import { fetchHealth, requestRelay } from "./api.ts";
 import type { RelayStatus } from "../../shared/protocol.ts";
-import { abandonNativeReads, getTransport, nativeTransport, serverResourceUrl, setTransport, type Transport } from "./transport.ts";
+import { abandonNativeReads, getTransport, nativeTransport, serverResourceUrl, setLinkMachine, setTransport, type Transport } from "./transport.ts";
 
 function testTransport(fetch: Transport["fetch"]): Transport {
   return {
@@ -117,6 +117,27 @@ it("gives up only another PC's reads when that PC's connection was lost, and eve
     abandonNativeReads();
     expect([...signals.values()].map((signal) => signal.aborted)).toEqual([true, true, true]);
   } finally {
+    globalThis.fetch = original;
+  }
+});
+
+it("a private link's page asks the network only for its own machine, and is refused the rest on the spot", async () => {
+  const original = globalThis.fetch;
+  const sent: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL) => { sent.push(String(input)); return Promise.resolve(Response.json({})); }) as typeof fetch;
+  try {
+    setLinkMachine("session-name-work");
+    await nativeTransport.fetch("/api/machines/session-name-work/session");
+    await nativeTransport.fetch("/api/machines");
+    await nativeTransport.fetch("/assets/app.js");
+    const refused = await nativeTransport.fetch("/api/devices");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: { code: "link_scope", message: "This private link opens one herdr session only" } });
+    expect((await nativeTransport.fetch("/api/session")).status).toBe(403);
+    expect((await nativeTransport.fetch("/api/machines/local/session")).status).toBe(403);
+    expect(sent).toEqual(["/api/machines/session-name-work/session", "/api/machines", "/assets/app.js"]);
+  } finally {
+    setLinkMachine(null);
     globalThis.fetch = original;
   }
 });

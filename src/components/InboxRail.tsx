@@ -6,6 +6,7 @@ import type { Machine } from "../../shared/machines.ts";
 import type { HeaderConnection } from "../lib/headerConnection.ts";
 import { useT, type Translate } from "../lib/i18n.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
+import { linkMachine } from "../lib/transport.ts";
 import { OvisMark } from "./OvisMark.tsx";
 import { RowMenu } from "./RowMenu.tsx";
 import "./InboxRail.css";
@@ -82,9 +83,9 @@ export function InboxRail({ onExit, onInbox, waiting, alerts, onSettings, pcs, s
         <button type="button" className="icon-button inbox-rail-item inbox-rail-alerts" aria-label={t("Alerts")} title={alerts.title} aria-pressed={alerts.on} onClick={() => { tally(() => usageCounters.count("inbox_rail_alerts")); alerts.toggle(); }}>
           <AlertsGlyph aria-hidden="true" />
         </button>
-        <button type="button" className="icon-button inbox-rail-item inbox-rail-settings" aria-label={t("Settings")} title={shortcutTitle(t("Settings"), "settings")} onClick={() => { tally(() => usageCounters.count("inbox_rail_settings")); tally(() => usageCounters.count("settings_by_button")); onSettings(); }}>
+        {linkMachine() === null && <button type="button" className="icon-button inbox-rail-item inbox-rail-settings" aria-label={t("Settings")} title={shortcutTitle(t("Settings"), "settings")} onClick={() => { tally(() => usageCounters.count("inbox_rail_settings")); tally(() => usageCounters.count("settings_by_button")); onSettings(); }}>
           <Settings aria-hidden="true" />
-        </button>
+        </button>}
         <button type="button" className="icon-button inbox-rail-item inbox-rail-pcs" aria-label={pcLabel} title={pcLabel} aria-haspopup="menu" aria-expanded={pcMenu !== null}
           disabled={machines.length === 0} onClick={(event) => { if (pcMenu === null) tally(() => usageCounters.count("inbox_rail_pcs")); setPcMenu(pcMenu === null ? event.currentTarget : null); }}>
           <PcGlyph aria-hidden="true" />

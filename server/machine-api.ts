@@ -1,6 +1,6 @@
 import { subscribeMachineEvents } from "./machine-events.ts";
 import { wireMachine, wireMachineEvent, type WireMachine } from "../shared/compact-agents.ts";
-import type { DevicePairedEvent, DeviceRemovedEvent, MachineRoster, PcInstallJob, PcInstallRequest, PcUpdateAll, PcUpdateStarted, PendingRedemptionsEvent, RelayPairingsEvent, RemotePairingsEvent, SetupAction, SetupRequest } from "../shared/machines.ts";
+import { MACHINE_PROXY_PATH, type DevicePairedEvent, type DeviceRemovedEvent, type MachineRoster, type PcInstallJob, type PcInstallRequest, type PcUpdateAll, type PcUpdateStarted, type PendingRedemptionsEvent, type RelayPairingsEvent, type RemotePairingsEvent, type SetupAction, type SetupRequest } from "../shared/machines.ts";
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
 import type { PanePromptResponse, SessionSnapshot } from "../shared/protocol.ts";
@@ -96,7 +96,6 @@ export const slowMachinePath = (path: string): boolean => path === "worktree/cre
  * forwards, so such a path must be no route at all rather than "some other route".
  */
 export const nonCanonicalPath = (pathname: string): boolean => pathname.includes("//") || (pathname.length > 1 && pathname.endsWith("/")) || /%2f|%5c/i.test(pathname);
-export const MACHINE_PROXY_PATH = /^(?:session|sessions\/(?:history|resume)|agents|agent-catalog(?:\/(?:install|sign-in))?|integrations|system|usage\/statusline|pane\/(?:read|scroll|find|selection|conversation(?:\/image|\/tool-output)?|summary|commands|files|docs|omo-tasks|background-agent|plan|artifacts|btw|prompt|prompt\/answer|input|keys|close|rename|image|split|zoom|swap|move|resize|clear|focus)|workspace\/(?:create|rename|move|close|directories|diff\/files|diff\/file|diff\/refs|git\/log|git\/branches|git\/show|pr|pr\/log|pr\/merge)|worktree\/(?:create|list|inventory|open|remove)|tab\/(?:create|rename|close|move|move-to-workspace)|layout\/ratio|agent\/(?:rename|commands)|plugins\/actions|plugin\/action|fs\/(?:stat|file|favicon|text))$/;
 
 
 function transportFailure(id: string, path: string, error: unknown): Response {

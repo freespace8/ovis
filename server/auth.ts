@@ -144,6 +144,17 @@ function sessionCookie(token: string, secure: boolean): string {
   return `${TOKEN_COOKIE}=${encodeURIComponent(token)}; ${attributes}${secure ? "; Secure" : ""}`;
 }
 
+/** A private link's own credential (server/session-links.ts), kept apart from the token and device cookies. */
+export const LINK_COOKIE = "ovis_link";
+
+/**
+ * Lax, not Strict: the link is opened from a chat or a message, a navigation from another site, and its
+ * redirect must still carry the cookie to the page it lands on.
+ */
+export function linkCookie(token: string, secure: boolean): string {
+  return `${LINK_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_SECONDS}${secure ? "; Secure" : ""}`;
+}
+
 export function deviceCookie(token: string, secure: boolean): string {
   return `${DEVICE_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE_SECONDS}${secure ? "; Secure" : ""}`;
 }

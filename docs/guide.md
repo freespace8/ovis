@@ -793,6 +793,15 @@ A token is a credential on the wire as much as a cookie is: on plain `http://`, 
 
 The pairing code is a one-time secret: five wrong tries spend it.
 
+### Private links to a herdr session
+
+A private link opens one herdr session for whoever you give it to, with nothing else of this PC. It suits a teammate you want to hand one session, or your own phone, without pairing it as a device.
+
+- **Make one.** On the PC, or on a device that drives it, open the **Manage** menu of this PC or of another herdr session listed under it ([Other herdr sessions on this PC](#other-herdr-sessions-on-this-pc)), or **More** while that PC is open, and choose **Private link…**, then **Create private link**. The address looks like `https://<your PC>/s/<token>`. It is shown once, with a Copy button, and cannot be read back: the PC keeps only a hash of the token, in `session-links.json` in its state folder, so a copy of that file opens nothing. Make as many links to a session as you like, one for each person.
+- **What the visitor gets.** Opening the link sets a cookie and lands on that session with the same rights as a device that drives: they can read and type in its panes, open and close tabs and workspaces, and browse its files. They see that session alone, with no PC list, Settings, pairing, devices, updates or other sessions, and the server refuses everything else with 403, not only the page. The link works on a PC that asks for a token or pairing too: the link is the credential. A request that holds the token, a paired device or the PC's own access still counts as the owner's, not as the link's.
+- **Revoke.** **Private link…** lists a session's links by when they were made, with **Revoke** on each. Revoking ends that link's open connections at once and refuses its cookie from the next request on. Links last until revoked and survive a restart. A link to a session that is not running shows that PC as disconnected until the session starts again.
+- **Keep it private.** Whoever holds the address drives the session, so send it only over a channel you trust, and prefer HTTPS: on plain `http://` the token crosses the network in clear text, as the access token does.
+
 ### On your LAN over HTTPS
 
 A phone on the same network as the PC can reach Ovis directly over HTTPS, beside the address it uses today (a tunnel, `tailscale serve`, loopback). It is off unless you set `OVIS_LAN_HTTPS_PORT` (for example `7318`) where Ovis starts, as with `HOST` and `PORT` ([Configuration](#configuration)).

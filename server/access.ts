@@ -77,6 +77,8 @@ export interface AccessInput {
   /** the operator declared `tailscale serve` as this install's only ingress (OVIS_TAILSCALE_SERVE_ONLY) */
   serveOnly: boolean;
   tokenConfigured: boolean;
+  /** the request's private-link cookie names a link that exists (server/session-links.ts) */
+  link?: SessionLinkHolder | null;
   /** a device cookie was confirmed by DeviceStore.match: the gate is closed to strangers */
   gated: boolean;
   /** Portal's sign-in, when this server's Portal runs one; unset is as if it did not */
@@ -92,8 +94,11 @@ export interface AccessInput {
   };
 }
 
+/** The private link a request holds: it opens `machine_id` and nothing else. */
+export interface SessionLinkHolder { readonly id: string; readonly machine_id: string }
+
 export type Access =
-  | { level: "full"; via: AccessVia; role: DeviceRole; device?: DeviceMatch; login?: string; portal?: PortalLogin }
+  | { level: "full"; via: AccessVia; role: DeviceRole; device?: DeviceMatch; login?: string; portal?: PortalLogin; link?: SessionLinkHolder }
   | { level: "none"; reason: AccessRefusal };
 
 export function isLoopbackAddress(address: string): boolean {
@@ -279,7 +284,7 @@ export function portalLogin(input: Pick<AccessInput, "portal">): PortalLogin | n
  * PCs). Never a visitor of an open install (nothing paired), a Portal visitor, or a device that only watches.
  */
 export function ownerAccess(access: Access): boolean {
-  return access.level === "full" && access.role === "drive" && access.via !== "open" && access.via !== "portal";
+  return access.level === "full" && access.role === "drive" && access.via !== "open" && access.via !== "portal" && access.via !== "link";
 }
 
 /**
@@ -295,7 +300,20 @@ export function decideMachineAccess(input: { relayPeer?: DeviceMatch; ownerSocke
   return { level: "none", reason: "pairing_required" };
 }
 
+/**
+ * A private link is the credential of whoever holds it, so it stands in for the ways in that need none or
+ * refuse a stranger: it is what a request gets that would otherwise be turned away, and what an open
+ * install's anonymous visitor is narrowed to. The token, a paired device, a relay device, Portal's sign-in,
+ * this PC and its Tailscale login are the owner's own and win.
+ */
 export function decideAccess(input: AccessInput): Access {
+  const access = decideOwnAccess(input);
+  if (input.link === undefined || input.link === null) return access;
+  if (access.level === "full" && access.via !== "open") return access;
+  return { level: "full", via: "link", role: "drive", link: input.link };
+}
+
+function decideOwnAccess(input: AccessInput): Access {
   if (input.relayPeer !== undefined) return { level: "full", via: "relay", role: input.relayPeer.role, device: input.relayPeer };
   if (input.tokenMatched) return { level: "full", via: "token", role: "drive" };
   if (input.device !== null) return { level: "full", via: "device", role: input.device.role, device: input.device };

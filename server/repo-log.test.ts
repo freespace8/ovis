@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { ApiError, RepoBranches, RepoCommitDetail, RepoDiffFileList, RepoLog } from "../shared/protocol.ts";
 import { DeviceStore } from "./devices.ts";
 import { createServer } from "./index.ts";
-import { MACHINE_PROXY_PATH } from "./machine-api.ts";
+import { MACHINE_PROXY_PATH } from "../shared/machines.ts";
 import { repoDiffFile, repoDiffFiles } from "./repo-diff.ts";
 import { REPO_LOG_MAX_LIMIT, repoBranches, repoCommit, repoLog } from "./repo-log.ts";
 

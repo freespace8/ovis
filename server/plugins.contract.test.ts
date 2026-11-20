@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createServer } from "./index.ts";
 import { herdrRpc, herdrSocketPath, pluginLogList, sessionSnapshot, workspaceClose, workspaceCreate, type WorkspaceCreateResult, type WorktreeOpenResult } from "./herdr/client.ts";
 import { disposableConfig } from "../scripts/disposable-config.ts";
-import { MACHINE_PROXY_PATH } from "./machine-api.ts";
+import { MACHINE_PROXY_PATH } from "../shared/machines.ts";
 import type { ApiError, PluginActionResult, PluginActionsResponse } from "../shared/protocol.ts";
 
 /**

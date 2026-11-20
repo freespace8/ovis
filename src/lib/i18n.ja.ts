@@ -288,6 +288,7 @@ const BASE: Record<string, string> = {
   "Tabs of {workspace}": "{workspace} のタブ",
   "Reconnecting…": "再接続しています…",
   "Add PC": "PC を追加",
+  "Private link…": "プライベートリンク…",
   "Connect": "接続",
   "Step {n} of {total}": "ステップ {n} / {total}",
   "{done} of {total}": "{done} / {total}",

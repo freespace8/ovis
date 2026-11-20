@@ -9,7 +9,7 @@ export function collapsedKey(machineId: string, page: { relayShell: boolean; pat
 
 import { tally } from "../lib/usageCounters.ts";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowLeftRight, ChevronDown, ChevronRight, Download, EyeOff, Monitor, Pencil, Plug, Plus, RefreshCw, Search, Settings, SlidersHorizontal, Trash2, Unplug, X } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronRight, Download, EyeOff, Link, Monitor, Pencil, Plug, Plus, RefreshCw, Search, Settings, SlidersHorizontal, Trash2, Unplug, X } from "lucide-react";
 import { OWN_UPDATE_OFFER, pairedPc, type Machine, type MachineState, type MachineUpdate, type RemoteOvis } from "../../shared/machines.ts";
 import { copyText } from "../lib/clipboard.ts";
 import { AppLayoutContext, FULL_LAYOUT, MachineContext, type LayoutOffer } from "../lib/machineContext.tsx";
@@ -28,8 +28,7 @@ import { UsageMeters } from "./UsageMeters.tsx";
 import { SidebarAccountPcs } from "./SidebarAccountPcs.tsx";
 import { ShellPcs, useShellPcs } from "./ShellPcs.tsx";
 import { RowMenu, rowMenuAnchor, type RowMenuItem } from "./RowMenu.tsx";
-import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { sidebarAgents } from "../lib/sidebarAgents.ts";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";import { sidebarAgents } from "../lib/sidebarAgents.ts";
 import { useEdgeFades } from "../lib/useEdgeFades.ts";
 import "./Machines.css";
 import "./SidebarSections.css";
@@ -93,7 +92,7 @@ export const STATE_WORD: Readonly<Record<MachineState, string>> = {
   error: "Connection error",
 };
 
-interface Props { machines: Machine[]; footerStart?: ReactNode; afterPcs?: ReactNode; allMachines?: Machine[]; selectedMachineId: string; selectedPaneId: string | null; activity: SidebarActivity; actions: AppActions; watching?: boolean; appLayout?: (machineId: string) => LayoutOffer; drawerOpen?: boolean; filterRequest?: number; onSelect(machineId: string, paneId: string | null): void; onNew(machineId: string): void; onSetup(machine: Machine, update?: boolean): void; onUsageLogin(paneId: string): void }
+interface Props { machines: Machine[]; footerStart?: ReactNode; afterPcs?: ReactNode; allMachines?: Machine[]; selectedMachineId: string; selectedPaneId: string | null; activity: SidebarActivity; actions: AppActions; watching?: boolean; /** this page is a private link's: one session, and none of the controls of the PC around it */ linkVisitor?: boolean; appLayout?: (machineId: string) => LayoutOffer; drawerOpen?: boolean; filterRequest?: number; onSelect(machineId: string, paneId: string | null): void; onNew(machineId: string): void; onSetup(machine: Machine, update?: boolean): void; onUsageLogin(paneId: string): void }
 export function MachineSidebar(props: Props) {
   const t = useT();
   const activity = props.activity;
@@ -266,7 +265,7 @@ export function MachineSidebar(props: Props) {
         <p className={noMatchWords === null ? "visually-hidden" : "tree-state sidebar-filter-empty"} role="status">{noMatchWords}</p>
         {props.machines.map((machine) => <MachineGroup key={machine.id} {...props} machine={machine} headerless={headerless && machine.id === loneHost} canHide={canHideMachine(roster, hiddenIds, machine.id)} onHide={() => hideMachine(machine.id)} />)}
         {/* a PC's own window, driven by its owner: the account's PCs not added yet (the phone app and the hosted shell list their own) */}
-        {exitToPcs === null && !props.watching && <SidebarAccountPcs machines={roster} hidden={filter.active} onAdded={props.actions.connectPc} />}
+        {exitToPcs === null && !props.watching && !props.linkVisitor && <SidebarAccountPcs machines={roster} hidden={filter.active} onAdded={props.actions.connectPc} />}
         <p className={loadingWords === null ? "visually-hidden" : "tree-state"} role="status">{loadingWords}</p>
         {/* the hosted app on a PC's page: the other PCs this device opens, a tap away (ShellPcs.tsx) */}
         {exitToPcs === "shell" && <ShellPcs {...shellPcs} />}
@@ -289,8 +288,8 @@ export function MachineSidebar(props: Props) {
       {/* no Install app here: a page knows it is installed only in the app's own window, so a row kept
           showing in every tab. */}
       <div className="sidebar-footer-row">
-        <button className="btn btn-ghost sidebar-footer-action sidebar-footer-settings" aria-label={t("Settings")} title={t("Settings (⌘⇧,)")} onClick={() => { tally(() => props.actions.counted?.("settings", "button")); props.actions.openSettings(); }}><Settings aria-hidden="true" /></button>
-        <UsageMeters watching={props.watching} onLocalLogin={props.watching ? undefined : props.onUsageLogin} />
+        {!props.linkVisitor && <button className="btn btn-ghost sidebar-footer-action sidebar-footer-settings" aria-label={t("Settings")} title={t("Settings (⌘⇧,)")} onClick={() => { tally(() => props.actions.counted?.("settings", "button")); props.actions.openSettings(); }}><Settings aria-hidden="true" /></button>}
+        {!props.linkVisitor && <UsageMeters watching={props.watching} onLocalLogin={props.watching ? undefined : props.onUsageLogin} />}
       </div>
     </footer>
   </div></SidebarFilterProvider></SidebarActivityProvider>;
@@ -327,15 +326,16 @@ export function machineAway(machine: Pick<Machine, "kind" | "enabled" | "state" 
   return reason === "refused" || reason === "timeout" || reason === "unreachable" ? "unreachable" : null;
 }
 
-export type ManageAction = "rename" | "toggle" | "setup" | "update" | "hide" | "remove";
+export type ManageAction = "rename" | "toggle" | "setup" | "update" | "link" | "hide" | "remove";
 
 /** Settings → Devices and PCs offers Remove for a PC added here that is not connected (herdr's own and herdr-core's stay). */
 export function removablePc(machine: Pick<Machine, "kind" | "state" | "herdr_profile_id">): boolean {
   return machine.state !== "connected" && machine.herdr_profile_id === undefined && (machine.kind === "ssh" || pairedPc(machine));
 }
 
-export function manageActions(machine: Pick<Machine, "kind" | "herdr_profile_id" | "enabled" | "target" | "action_required">, { busy, canHide }: { busy: boolean; canHide: boolean }): { id: ManageAction; disabled: boolean }[] {
-  const own = !machine.herdr_profile_id && machine.kind !== "hc" && machine.kind !== "session";
+/** `canLink`: the owner makes private links, to this PC's own session and to the sessions found on it. */
+export function manageActions(machine: Pick<Machine, "kind" | "herdr_profile_id" | "enabled" | "target" | "action_required">, { busy, canHide, canLink = false }: { busy: boolean; canHide: boolean; canLink?: boolean }): { id: ManageAction; disabled: boolean }[] {
+  const own = !machine.herdr_profile_id && machine.kind !== "local" && machine.kind !== "hc" && machine.kind !== "session";
   const reachable = machine.enabled && Boolean(machine.target);
   const actions: { id: ManageAction; disabled: boolean }[] = [];
   if (own) actions.push({ id: "rename", disabled: busy }, { id: "toggle", disabled: busy });
@@ -343,7 +343,8 @@ export function manageActions(machine: Pick<Machine, "kind" | "herdr_profile_id"
     if (machine.action_required !== "setup" && machine.action_required !== "connect") actions.push({ id: "setup", disabled: !reachable });
     if (machine.action_required !== "connect") actions.push({ id: "update", disabled: !reachable });
   }
-  if (canHide) actions.push({ id: "hide", disabled: busy });
+  if (canLink && (machine.kind === "local" || machine.kind === "session")) actions.push({ id: "link", disabled: busy });
+  if (canHide && machine.kind !== "local") actions.push({ id: "hide", disabled: busy });
   if (own) actions.push({ id: "remove", disabled: busy });
   return actions;
 }
@@ -414,10 +415,13 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
     if (save && typed !== "" && typed !== machine.name) void mutate("PATCH", { name: typed });
   };
   const stateWords = machine.action_required === "setup" ? t("Setup needed") : asksWhatToConnect(machine) ? t("Choose what to connect to") : t(STATE_WORD[machine.state]);
-  const stateLine = machine.kind === "hc" ? stateWords : `${stateWords} · ${machine.kind === "relay" ? t("through the relay") : machine.kind === "address" ? t("by its address") : machine.kind === "session" ? t("on this PC") : t("over SSH")}`;
+  const stateLine = machine.kind === "hc" || machine.kind === "local" ? stateWords : `${stateWords} · ${machine.kind === "relay" ? t("through the relay") : machine.kind === "address" ? t("by its address") : machine.kind === "session" ? t("on this PC") : t("over SSH")}`;
   const manageNote = machine.kind === "hc" ? t("A machine of herdr-core. Add, rename or remove it with hc machine or in the Herdr app.") : machine.kind === "session" ? t("Another herdr session on this PC. It is listed while that session runs.") : machine.herdr_profile_id ? t("Managed by herdr. Rename, disable or remove it there.") : null;
-  const manageItems = (): RowMenuItem[] => manageActions(machine, { busy, canHide }).map(({ id, disabled }): RowMenuItem => {
+  // the owner's page offers private links (App.tsx), to this PC's own session and to the sessions found on it
+  const canLink = props.actions.openSessionLinks !== undefined;
+  const manageItems = (): RowMenuItem[] => manageActions(machine, { busy, canHide, canLink }).map(({ id, disabled }): RowMenuItem => {
     switch (id) {
+      case "link": return { id, disabled, label: t("Private link…"), icon: Link, run: () => props.actions.openSessionLinks?.(machine) };
       case "rename": return { id, disabled, label: t("Rename…"), icon: Pencil, run: () => { setName(machine.name); setRenaming(true); } };
       case "toggle": return { id, disabled, label: t(machine.enabled ? "Disconnect" : "Connect"), icon: machine.enabled ? Unplug : Plug, run: () => void mutate("PATCH", { enabled: !machine.enabled }) };
       case "setup": return { id, disabled, label: t("Reconnect / setup"), icon: RefreshCw, run: () => props.onSetup(machine) };
@@ -477,7 +481,7 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
         ? <div className="machine-title">{titleBody}</div>
         : <button ref={titleButton} type="button" className={`machine-title${current ? " is-current" : ""}`} aria-expanded={!folded} aria-label={foldLabel} title={machine.name} aria-current={current ? "true" : undefined} onClick={toggle}>{titleBody}</button>}
       {online && agentCount > 0 && <SidebarCount className="machine-agent-count" n={agentCount} words={agentCount === 1 ? t("1 agent") : t("{n} agents", { n: agentCount })} tooltip={false} />}
-      {machine.kind !== "local" && <button ref={manageButton} type="button" className="sidebar-row-action machine-manage" aria-label={t("Manage {name}", { name: machine.name })} title={t("Manage PC")} aria-haspopup={sheet ? "dialog" : "menu"} aria-expanded={menu !== null} onClick={(event) => setMenu(menu === null ? event.currentTarget : null)}><SlidersHorizontal aria-hidden="true" /></button>}
+      {!props.linkVisitor && (machine.kind !== "local" || canLink) && <button ref={manageButton} type="button" className="sidebar-row-action machine-manage" aria-label={t("Manage {name}", { name: machine.name })} title={t("Manage PC")} aria-haspopup={sheet ? "dialog" : "menu"} aria-expanded={menu !== null} onClick={(event) => setMenu(menu === null ? event.currentTarget : null)}><SlidersHorizontal aria-hidden="true" /></button>}
       <button className="sidebar-row-action machine-toggle" tabIndex={-1} aria-hidden="true" aria-expanded={!folded} aria-label={foldLabel} title={foldLabel} onClick={toggle}>{folded ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}</button>
       <button className="sidebar-row-action machine-new" disabled={!canCreate} aria-label={t("New workspace on {name}", { name: machine.name })} title={createTitle} onClick={() => props.onNew(machine.id)}><Plus aria-hidden="true" /></button>
     </header>}

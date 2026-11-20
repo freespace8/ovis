@@ -1,6 +1,7 @@
 import type { PortalSignIn } from "./portal.ts";
 
-export type AccessVia = "local" | "tailscale" | "device" | "token" | "open" | "portal" | "relay";
+/** `link`: a private link to one herdr session (shared/session-links.ts), which reaches that session and nothing else. */
+export type AccessVia = "local" | "tailscale" | "device" | "token" | "open" | "portal" | "relay" | "link";
 export type AccessRefusal = "other_user" | "pairing_required" | "token_required" | "locked" | "strict";
 /** What a paired device may do: drive (type, answer, manage) or only watch. */
 export type DeviceRole = "drive" | "watch";
@@ -22,6 +23,8 @@ export interface HealthAuth {
   readonly role?: DeviceRole;
   /** with `via: "portal"`: who signed in through Portal */
   readonly portal?: PortalLogin;
+  /** with `via: "link"`: the one machine this private link opens */
+  readonly link?: { readonly machine_id: string };
   readonly reason?: AccessRefusal;
   /**
    * account-opens-all/1: this request is this PC's own window (loopback with no proxy, or the access token from there),

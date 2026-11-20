@@ -36,6 +36,8 @@ export interface AppActions {
   openSettings: () => void;
   openAddPc: (preset?: AddPcPreset) => void;
   connectPc: (machine: Machine) => void;
+  /** The owner's private links to a machine's session (SessionLinksDialog); absent on any other page. */
+  openSessionLinks?: (machine: Pick<Machine, "id" | "name">) => void;
   toggleSidebar: () => void;
   inboxMode: { on: boolean; go: () => void } | null;
   openSidebarFilter: () => void;

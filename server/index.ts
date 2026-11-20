@@ -24,6 +24,7 @@ import { PreferenceStore } from "./preferences.ts";
 import { readOmpHeldFilesSetting } from "./omp.ts";
 import { readBrowserToolSetting } from "./agent-launch.ts";
 import { SeenStore } from "./seen.ts";
+import { SessionLinks } from "./session-links.ts";
 import type { SeenFinish } from "../shared/seen.ts";
 import { TailnetIdentitySource } from "./tailscale.ts";
 import { SHELL_AGENTS, ShellAgentLocator } from "./shell-agent.ts";
@@ -674,7 +675,7 @@ export function createServer(
       switchRuntime: () => { const answer = options.runtimeService!.request("herdr-core"); return answer.ok ? null : answer.message; },
       ...(options.herdrCoreInstaller ? { installer: options.herdrCoreInstaller } : {}),
     }) : null,
-    options, relay: ovisRelay, relayReceiptIds: new RelayReceiptIds(), hostname, token, bridgeToken, bootId, devices, accountMailbox, accountIntroductions: new AccountIntroductions(Date.now, join(stateDir, "account-introductions.json")), accountHolds, safetyLog, catchUp, accountRows, preferences, herdrSidebar, identityOf, serveOnly, portalGuards, shellAgents, agentDetector, agentOffered, agentInstaller, openCodeState, cliProxyRoutes, usageLogin, usage, usageAccounts, systemSampler, fontsDir: join(stateDir, "fonts"), voice, browserSnapshot, core, seen, piReader, orderSequence, clientConnectionLog, requestLog, portalStartup, recoveryReleases, lockSignal,
+    options, relay: ovisRelay, relayReceiptIds: new RelayReceiptIds(), hostname, token, bridgeToken, bootId, devices, sessionLinks: new SessionLinks(stateDir), accountMailbox, accountIntroductions: new AccountIntroductions(Date.now, join(stateDir, "account-introductions.json")), accountHolds, safetyLog, catchUp, accountRows, preferences, herdrSidebar, identityOf, serveOnly, portalGuards, shellAgents, agentDetector, agentOffered, agentInstaller, openCodeState, cliProxyRoutes, usageLogin, usage, usageAccounts, systemSampler, fontsDir: join(stateDir, "fonts"), voice, browserSnapshot, core, seen, piReader, orderSequence, clientConnectionLog, requestLog, portalStartup, recoveryReleases, lockSignal,
     get localConfirms() { return devices.screenApprovalActive() ? localConfirms : undefined; },
     get pendingRedemptions() { return devices.screenApprovalActive() ? pendingRedemptions : undefined; },
     get keyProofPairings() { return devices.screenApprovalActive() ? keyProofPairings : undefined; },

@@ -55,7 +55,8 @@ import { openPresentation } from "./lib/filePresentation.ts";
 import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
-import { LOCAL_MACHINE, pairedPc, paneStorageId } from "../shared/machines.ts";
+import { LOCAL_MACHINE, pairedPc, paneStorageId, type Machine } from "../shared/machines.ts";
+import { SessionLinksDialog } from "./components/SessionLinksDialog.tsx";
 import { inNativeApp } from "./lib/nativeApp.ts";
 import { serverIdOfPath, shellMode } from "./lib/shellMode.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
@@ -242,7 +243,7 @@ export function App() {
   const { selectedMachineId, setSelectedMachineId, selectedMachine, snapshot } = useSelectedMachine({ initialLink, machines });
   const { machinesRef } = useMachinesRef({ machines });
   const [updateRemote, setUpdateRemote] = useState(false);
-  const { machineDialog, setMachineDialog, addPcPreset, setAddPcPreset, addPcFocusReturn, closeMachineDialog } = useMachineDialog();
+  const { linksFor, setLinksFor, machineDialog, setMachineDialog, addPcPreset, setAddPcPreset, addPcFocusReturn, closeMachineDialog } = useMachineDialog();
   const { newSessionMachineId, setNewSessionMachineId } = useNewSessionMachine();
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
   const exposure = health?.lan_exposure ?? health?.direct_exposure;
@@ -255,9 +256,13 @@ export function App() {
   const { error, setError } = useRosterError();
   const { layoutNotice, setLayoutNotice } = useLayoutNotice();
   const { locked, setLocked, lockReason, pairCode, consumePairCode, pairingUnconfirmed, onPaired, auth, canSignOut, security, readBridgeHealth } = useAccessState({ ui: settings.uiFontFamily, chat: settings.chatFontFamily });
-  const pendingAccess = locked === true ? false : auth === null ? undefined : auth.authenticated && auth.role === "drive" && auth.via !== "open";
+  const pendingAccess = locked === true ? false : auth === null ? undefined : auth.authenticated && auth.role === "drive" && auth.via !== "open" && auth.via !== "link";
+  // a private link's page: one session, none of the PC's own controls (shared/session-links.ts)
+  const linkVisitor = auth?.via === "link";
+  // the owner makes private links: a driving sign-in that is neither the open LAN, Portal nor a link (server/access.ts ownerAccess)
+  const linkOwner = auth?.authenticated === true && auth.role === "drive" && auth.via !== "open" && auth.via !== "portal" && auth.via !== "link";
   const { pairedNotices, setPairedNotices, dismissPairedNotice, relayPairings, setRelayPairings, remotePairings, setRemotePairings, removedNotices, setRemovedNotices, dismissRemovedNotice, pendingKeys, setPendingKeys, clearPendingKeys } = usePairedNotices(pendingAccess);
-  const updates = useUpdates(locked === false);
+  const updates = useUpdates(locked === false && !linkVisitor);
   const desktopUpdate = useDesktopUpdate();
   const { selectedPaneId, setSelectedPaneId, notificationViewTarget, setNotificationViewTarget, terminalPeek, setTerminalPeek, endPeek, pendingLink, linkLanded, setLinkLanded, rosterSeq, linkSince, selectionSince, rosterTick, setRosterTick, linkTick, setLinkTick } = useSelectionState({ initialLink });
   const { otherRecheck, otherRosterTick, setOtherRosterTick } = useSplitRecheck();
@@ -294,7 +299,7 @@ export function App() {
   const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newSessionPending, newTab, setNewTab, sessionHistory, setSessionHistory, worktreeFor, setWorktreeFor } = useNewSessionState({ initialLink, watching: auth?.role === "watch" });
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped, reportedBy, setReportedBy } = useConnectionChip();
   const { notifications, setNotifications, pushOn, setPushOn, pushOnRef } = useNotificationState();
-  const { receive: receivePreferences, saveError: settingsSaveError, paused: settingsSavePaused, retrying: settingsSaveRetrying, retry: retrySettingsSave, resubscribed: preferencesResubscribed, disconnected: preferencesDisconnected, closed: preferencesClosed, known: sharedSettingsKnown } = usePreferencesSync(locked === false);
+  const { receive: receivePreferences, saveError: settingsSaveError, paused: settingsSavePaused, retrying: settingsSaveRetrying, retry: retrySettingsSave, resubscribed: preferencesResubscribed, disconnected: preferencesDisconnected, closed: preferencesClosed, known: sharedSettingsKnown } = usePreferencesSync(locked === false && !linkVisitor);
   const tabLabelWatching = auth?.role === "watch";
   // a file is edited only from a browser that drives this PC, as the server checks too (server/file-edit.ts)
   const fileEditable = auth?.role === "drive" && auth.via !== "portal" && auth.via !== "open";
@@ -333,7 +338,7 @@ export function App() {
   const { enableNotifications, disableNotifications, repairNotifications } = useNotificationSwitch({ updateSettings, locked, notifications, setNotifications, alerts, alertsRef, alertsOn, setPushOn });
   const localSnapshot = machines.find((machine) => machine.id === "local")?.snapshot ?? null;
   const setupGuide = useSetupGuide({
-    enabled: locked === false,
+    enabled: locked === false && !linkVisitor,
     workspaces: machineRosterLoaded && localSnapshot !== null ? localSnapshot.workspaces.length : null,
     // undefined holds the decision until the access facts and this device's role are in: a failed read decides nothing
     pairingGate: security.state === "loading" || security.state === "error" || auth === null ? undefined : security.state === "known" ? security.summary.pairing_gate : null,
@@ -341,7 +346,7 @@ export function App() {
     showUsage: settings.showUsage,
   });
   const guideShown = setupGuide.guide !== null && !setupGuide.paused;
-  const rowFacts = setupGuide.guide === null && auth?.role !== "watch" && localSnapshot !== null;
+  const rowFacts = setupGuide.guide === null && auth?.role !== "watch" && !linkVisitor && localSnapshot !== null;
   const rowStore = browserStorage();
   const rowOn = rowFacts && rowStore !== null && setupRowState(rowStore) === "on";
   const deviceNotices = useAccountDeviceNotices({ machines, machineSessions, selectedMachineId, pageServerId: health?.web_ui?.server_id });
@@ -420,7 +425,7 @@ export function App() {
     if (reload) window.location.reload();
   }, [auth?.via, clearPendingKeys, loadHealth, t]);
 
-  const { selectedMachineRef, selectTarget, selectTargetRef, picks } = useSelectTarget({ selectedMachineId, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setDrawerOpen, setOutputStopped, setNotificationViewTarget, setTerminalPeek, pendingLink, pendingFile, setLinkLanded, selectionHint, selectionSince, rosterSeq, snapshot, selectedMachine, selectedPaneId, setHeaderNote, linkTick, movingPanes, onPick: (paneId) => { setupGuide.stepAside(); if (paneId !== null) inbox.leave(); },
+  const { selectedMachineRef, selectTarget, selectTargetRef, picks } = useSelectTarget({ selectedMachineId, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setDrawerOpen, setOutputStopped, setNotificationViewTarget, setTerminalPeek, pendingLink, pendingFile, setLinkLanded, selectionHint, selectionSince, rosterSeq, snapshot, selectedMachine, selectedPaneId, setHeaderNote, linkTick, movingPanes, linkedMachine: auth?.link?.machine_id, onPick: (paneId) => { setupGuide.stepAside(); if (paneId !== null) inbox.leave(); },
     onLinkMiss: () => { if (inbox.enabled) inbox.show(); } });
 
   const { selectPane } = useSelectPane({ pendingLink, pendingFile, setLinkLanded, selectionHint, selectedPaneId, setSelectedPaneId, setNotificationViewTarget, setTerminalPeek, setAutoSelected, setDrawerOpen, setHeaderNote, onPick: () => { picks.current += 1; setupGuide.stepAside(); inbox.leave(); } });
@@ -691,10 +696,12 @@ export function App() {
         setFindRequest((request) => ({ paneId: selectedPaneId, serial: request.serial + 1 }));
       },
       openSettings: () => {
+        if (linkVisitor) return;
         setDrawerOpen(false);
         setSettingsSection(null);
         setSettingsOpen(true);
       },
+      ...(linkOwner ? { openSessionLinks: (machine: Pick<Machine, "id" | "name">) => { setDrawerOpen(false); setLinksFor(machine); } } : {}),
       openAddPc: (preset) => {
         setSettingsOpen(false);
         setUpdateRemote(false);
@@ -736,7 +743,7 @@ export function App() {
       },
       closeTab: !tabCloseOffered ? null : () => requestCloseTab(selectedMachineId, selectedPaneId!),
     }),
-    [closeOffered, tabCloseOffered, requestCloseTab, inbox.shown, inMode, modeOffered, enterInbox, leaveMode, revealFiles, selectPane, selectTarget, selectedPaneId, selectedPane?.own_tab, selectedMachineId, appLayout, reorderCoordinator, tabStripMounted, setView, view, terminalPeek, endPeek, updateSettings, resolvedTheme, canSignOut, lock, bell.run, enableNotifications, load, layoutRefused, moveRefused, lenses, openSidebarFilter, selectedSearchable, requestSearch, split, soloSlot, settings.webLinks, settings.sidebarBackgroundWorkspaces, openWebPage],
+    [closeOffered, tabCloseOffered, requestCloseTab, inbox.shown, inMode, modeOffered, enterInbox, leaveMode, revealFiles, selectPane, selectTarget, selectedPaneId, selectedPane?.own_tab, selectedMachineId, appLayout, reorderCoordinator, tabStripMounted, setView, view, terminalPeek, endPeek, updateSettings, resolvedTheme, canSignOut, lock, bell.run, enableNotifications, load, layoutRefused, moveRefused, lenses, openSidebarFilter, selectedSearchable, requestSearch, split, soloSlot, settings.webLinks, settings.sidebarBackgroundWorkspaces, openWebPage, linkVisitor, linkOwner],
   );
 
   useShortcuts(actions, locked === false);
@@ -815,6 +822,7 @@ export function App() {
     ...(foldFind && more ? [{ id: "find-group", label: t("Find…"), icon: TextSearch, run: () => openMoreGroup("find", more.anchor) }] : findInTerminal),
     ...(selectedPane && (!wideScreen || inMode) ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: moreFilesRun(actions.counted, () => setFilesOpen(true)) }] : []),
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
+    ...(linkOwner && (selectedMachine?.kind === "local" || selectedMachine?.kind === "session") ? [{ id: "session-links", label: t("Private link…"), icon: Link, run: () => actions.openSessionLinks?.(selectedMachine) }] : []),
     { id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() },
     ...paneMoreItems.filter((item) => !(foldFind && item.id === "search-conversation") && (!foldPane || item.id.startsWith("pane:")))
       .map((item, index) => index === 0 ? { ...item, divider: true } : item),
@@ -839,7 +847,7 @@ export function App() {
   ];
   const modeEndItems: RowMenuItem[] = [
     ...fromMore("alerts").map((item) => ({ ...item, divider: false })),
-    { id: "settings", label: t("Settings"), icon: SettingsGlyph, divider: true, run: () => { actions.counted?.("settings", "menu"); actions.openSettings(); } },
+    ...(linkVisitor ? [] : [{ id: "settings", label: t("Settings"), icon: SettingsGlyph, divider: true, run: () => { actions.counted?.("settings", "menu"); actions.openSettings(); } }]),
     ...fromMore("sign-out"),
   ];
   const modeAppItems: RowMenuItem[] = [...modeLeadItems, ...modeEndItems];
@@ -1133,7 +1141,7 @@ export function App() {
           {error && <div className="error-state" role="alert"><p>{error}</p><button className="btn" onClick={() => void load()}>{t("Retry")}</button></div>}
           <RenderBoundary resetKey={null} fallback={(retry) => <RegionCrash message={t("The sidebar can't be shown.")} retry={retry} />}>
             <CrashProbe region="sidebar" />
-            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} allMachines={machines} watching={auth?.role === "watch"} appLayout={appLayoutOn} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={openNewOn}
+            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} allMachines={machines} watching={auth?.role === "watch"} linkVisitor={linkVisitor} appLayout={appLayoutOn} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={openNewOn}
               afterPcs={browserTabs !== null && filePanelAvailable ? <BrowserTabsGroup tabs={browserTabs} selected={browserTab} onSelect={openBrowserTab} /> : undefined}
               footerStart={<>{setupRow}{modeOffered && wideScreen && !markEnters && <InboxFootEntry onOpen={() => { actions.counted?.("inbox", "button"); enterInbox(); }} />}</>} /></ReorderContext.Provider>
           </RenderBoundary>
@@ -1147,7 +1155,7 @@ export function App() {
         <div className={`pane-column${chatShown ? " is-chat" : ""}`} inert={drawerModal || undefined}>
         <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
         <DesktopUpdateNotice update={desktopUpdate} />
-        <TelemetryNotice enabled={locked === false && setupGuide.settled && !guideShown} onOpen={() => { setSettingsLinkPage("about"); setSettingsLinkSection("telemetry"); setSettingsOpen(true); }} />
+        <TelemetryNotice enabled={locked === false && !linkVisitor && setupGuide.settled && !guideShown} onOpen={() => { setSettingsLinkPage("about"); setSettingsLinkSection("telemetry"); setSettingsOpen(true); }} />
         <MachineActionBanner machines={machines} onSetup={(machine, update = false) => { setDrawerOpen(false); setUpdateRemote(update); setMachineDialog(machine); }} />
         {layoutNotice && <p className="pane-notice" role="alert">{layoutNotice}</p>}
         {/* the last answer that got through: a listener does not stop because herdr's ping failed */}
@@ -1401,6 +1409,7 @@ export function App() {
           void load();
         }}
       /></MachineContext.Provider>}
+      {linksFor && <SessionLinksDialog machineId={linksFor.id} machineName={linksFor.name} onClose={() => setLinksFor(null)} />}
       {machineDialog && <MachineDialog updateRemote={updateRemote} machine={machineDialog === "new" ? undefined : machineDialog} preset={machineDialog === "new" ? addPcPreset ?? undefined : undefined} onClose={closeMachineDialog} onConnected={(id) => { closeMachineDialog(); selectTarget(id, null); void load(); }} />}
       <Droplet onOpen={(machineId, paneId) => {
         if (!machinesRef.current.find((m) => m.id === machineId)?.snapshot?.panes.some((p) => p.pane_id === paneId)) return;

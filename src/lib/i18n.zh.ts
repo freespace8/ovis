@@ -290,6 +290,7 @@ const BASE: Record<string, string> = {
   "Tabs of {workspace}": "{workspace} 的标签页",
   "Reconnecting…": "正在重连…",
   "Add PC": "添加 PC",
+  "Private link…": "私有链接…",
   "Connect": "连接",
   "Step {n} of {total}": "第 {n} 步，共 {total} 步",
   "{done} of {total}": "{done} / {total}",

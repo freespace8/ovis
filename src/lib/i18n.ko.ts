@@ -286,6 +286,7 @@ const BASE: Record<string, string> = {
   "Tabs of {workspace}": "{workspace}의 탭",
   "Reconnecting…": "재연결 중…",
   "Add PC": "PC 추가",
+  "Private link…": "비공개 링크…",
   "Connect": "연결",
   "Step {n} of {total}": "{total}단계 중 {n}",
   "{done} of {total}": "{total} 중 {done}",

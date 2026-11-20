@@ -1,0 +1,68 @@
+.session-links-dialog {
+  width: min(100%, 520px);
+}
+
+.modal-scrim:has(> .session-links-dialog) {
+  z-index: calc(var(--z-modal) + 3);
+}
+
+.session-links-dialog:focus {
+  outline: none;
+}
+
+.session-links-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+}
+
+.session-links-note,
+.session-links-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+.session-links-made {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+}
+
+.session-links-url {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.session-links-url .input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.session-links-error {
+  margin: 0;
+  color: var(--status-blocked);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.session-links-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-links-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: var(--hairline) solid var(--border);
+  font-size: var(--fs-sm);
+}

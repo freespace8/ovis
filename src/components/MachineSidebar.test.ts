@@ -152,6 +152,16 @@ describe("Manage PC's menu", () => {
     expect(waiting(ssh({ target: undefined }))).toEqual(["setup", "update"]);
   });
 
+  it("offers a private link to this PC's own session and to a session found on it, to the owner only", () => {
+    const linkIds = (machine: Managed, canLink: boolean) => manageActions(machine, { busy: false, canHide: true, canLink }).map(({ id }) => id);
+    expect(linkIds(ssh({ kind: "local", target: undefined }), true)).toEqual(["link"]);
+    expect(linkIds(ssh({ kind: "local", target: undefined }), false)).toEqual([]);
+    expect(linkIds(ssh({ kind: "session", target: undefined }), true)).toEqual(["link", "hide"]);
+    expect(linkIds(ssh({ kind: "session", target: undefined }), false)).toEqual(["hide"]);
+    expect(linkIds(ssh(), true)).toEqual(["rename", "toggle", "setup", "update", "hide", "remove"]);
+    expect(linkIds(ssh({ kind: "relay", target: undefined }), true)).toEqual(["rename", "toggle", "hide", "remove"]);
+  });
+
   it("holds a rename, a connect or disconnect, Hide and a removal while one of them runs", () => {
     expect(waiting(ssh(), true)).toEqual(["rename", "toggle", "hide", "remove"]);
     expect(waiting(ssh({ kind: "hc", target: undefined }), true)).toEqual(["hide"]);

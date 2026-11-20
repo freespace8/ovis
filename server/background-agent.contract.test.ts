@@ -10,7 +10,8 @@ import { forgetTranscriptState } from "./conversation.ts";
 import { DeviceStore } from "./devices.ts";
 import { herdrRpc, paneRead, sessionSnapshot, workspaceClose, workspaceCreate } from "./herdr/client.ts";
 import { createServer } from "./index.ts";
-import { handleMachineRequest, MACHINE_PROXY_PATH } from "./machine-api.ts";
+import { handleMachineRequest } from "./machine-api.ts";
+import { MACHINE_PROXY_PATH } from "../shared/machines.ts";
 import type { MachineManager } from "./machines.ts";
 
 const root = mkdtempSync(join(tmpdir(), "herdr-background-agent-contract-"));

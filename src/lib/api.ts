@@ -10,6 +10,7 @@ import type { PullRequestCheckLog, PullRequestMergeRequest, PullRequestView } fr
 import type { SystemReport } from "../../shared/system.ts";
 import type { MovePlanResponse, MoveStartRequest, MoveStopAllOffer, MoveStopAllRequest, MoveStopRequest } from "../../shared/runtime-move.ts";
 import type { EditableText, PaneDocuments, TextSaved, TextSaveRequest } from "../../shared/files.ts";
+import { SESSION_LINKS_PATH, type SessionLink, type SessionLinkCreated } from "../../shared/session-links.ts";
 import { parseSystemReport } from "./systemReport.ts";
 import { machinePath, type OwnJoinRequest, type BridgeHealth, type HerdrCoreFacts, type HerdrIdentity, type HerdrRuntimeFacts, type Machine, type MachineRoster, type PendingKey, type RuntimeName, type SetupAction, type SetupJob, type SetupRequest } from "../../shared/machines.ts";
 import type {
@@ -892,6 +893,19 @@ export async function revokeDevice(id: string): Promise<void> {
  */
 export async function revokeAllDevices(): Promise<DevicesRevokedAll> {
   return (await sendJson("/api/devices/revoke-all", "POST", {})).json();
+}
+
+export function fetchSessionLinks(): Promise<SessionLink[]> {
+  return getJson<SessionLink[]>(SESSION_LINKS_PATH, { cache: "no-store" });
+}
+
+/** POST /api/session-links: the answer holds the link's address, which the server never tells again. */
+export async function createSessionLink(machineId: string): Promise<SessionLinkCreated> {
+  return (await sendJson(SESSION_LINKS_PATH, "POST", { machine_id: machineId })).json();
+}
+
+export async function revokeSessionLink(id: string): Promise<void> {
+  await sendJson(`${SESSION_LINKS_PATH}/${encodeURIComponent(id)}`, "DELETE", {});
 }
 
 /** DELETE /api/auth: clears the session and device cookies, so the next health check reports the gate again. */

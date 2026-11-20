@@ -6,6 +6,8 @@ import { focusWorkspaceListToggle } from "./focus.ts";
 export function useMachineDialog() {
   const [machineDialog, setMachineDialog] = useState<Machine | "new" | null>(null);
   const [addPcPreset, setAddPcPreset] = useState<AddPcPreset | null>(null);
+  /** the machine whose private links are open (SessionLinksDialog) */
+  const [linksFor, setLinksFor] = useState<Pick<Machine, "id" | "name"> | null>(null);
   const addPcFocusReturn = useRef(false);
   const closeMachineDialog = useCallback(() => {
     setMachineDialog(null);
@@ -14,5 +16,5 @@ export function useMachineDialog() {
     addPcFocusReturn.current = false;
     focusWorkspaceListToggle();
   }, []);
-  return { machineDialog, setMachineDialog, addPcPreset, setAddPcPreset, addPcFocusReturn, closeMachineDialog };
+  return { linksFor, setLinksFor, machineDialog, setMachineDialog, addPcPreset, setAddPcPreset, addPcFocusReturn, closeMachineDialog };
 }
