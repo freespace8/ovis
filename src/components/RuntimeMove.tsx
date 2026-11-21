@@ -14,6 +14,7 @@ import type { MovePane, MovePlanResponse, MoveStopAllOffer } from "../../shared/
 import { LOCAL_MACHINE } from "../../shared/machines.ts";
 import { ApiError, cancelMove, confirmStopAll, fetchBridgeHealth, fetchMovePlan, installHerdrCore, prepareStopAll, startMove, stopMovePane } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
+import { useUpdatesOff } from "../lib/updatesOff.ts";
 import { paneLifetimes } from "../lib/paneLifetime.ts";
 import { moveInProgress, runningCommands } from "../lib/runtimeMove.ts";
 import { awaitRestart } from "../lib/runtimeSwitch.ts";
@@ -36,6 +37,7 @@ interface Props {
 
 export function RuntimeMove({ bootId, hidden, onServerRestarted, onOpenPane }: Props) {
   const t = useT();
+  const updatesOff = useUpdatesOff();
   const [answer, setAnswer] = useState<MovePlanResponse | null>(null);
   const [open, setOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -71,7 +73,7 @@ export function RuntimeMove({ bootId, hidden, onServerRestarted, onOpenPane }: P
         setInstalling(false);
       }
     };
-    if (hidden) return null;
+    if (hidden || updatesOff) return null;
     return (
       <SettingsRow label={t("Install herdr-core and move everything")}
         description={t("Installs herdr-core {version} into ~/.local/bin, then shows what moves before anything does.", { version: answer.install.version })}

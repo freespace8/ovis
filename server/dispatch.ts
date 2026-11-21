@@ -45,7 +45,7 @@ import { handlePushRequest } from "./push.ts";
 import { handlePromptRequest, type OpenCodePromptState } from "./prompt.ts";
 import { attachableIdentity } from "./pty/sidecar.ts";
 import { runtime } from "./herdr-core/runtime.ts";
-import { handleUpdateRequest, updateRequestAllowed } from "./update-api.ts";
+import { handleUpdateRequest, updateRequestAllowed, updatesOffResponse } from "./update-api.ts";
 import { handleHerdrUpdateRequest } from "./herdr-update.ts";
 import { handlePortalRequest } from "./portal.ts";
 import { handleRelayRequest } from "./relay/routes.ts";
@@ -536,7 +536,7 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       // a private link sees its one machine, and none of what this server's browsers share
       const response = holdsLink
         ? await handleMachineRequest(request, onlyMachine(machines, holdsLink.machine_id), ends, undefined, readOnly, herdrSidebar, undefined, undefined, ctx.relayBodyBudget, false, false)
-        : await handleMachineRequest(request, machines, ends, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ownerAccess(access), ctx.services.safetyLog !== null, devices);
+        : await handleMachineRequest(request, machines, ends, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ownerAccess(access), ctx.services.safetyLog !== null, devices, options.updatesOff === true);
       response.headers.set("cache-control", "no-store");
       if (issuedKey !== null && response.ok) response.headers.append("set-cookie", streamCookie(issuedKey, isSecureRequest(request)));
       return response;
@@ -632,6 +632,11 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     } catch (error) { return errorResponse(error); }
   }
 
+  // OVIS_UPDATES_OFF: Ovis's own updates, herdr's update and the herdr-core install all refuse, whoever asks
+  if (options.updatesOff && (pathname === "/api/updates" || pathname.startsWith("/api/updates/") || pathname === "/api/herdr/update" || pathname === `${RUNTIME_MOVE_PATH}/install`)) {
+    setRequestRoute("updates-off");
+    return updatesOffResponse();
+  }
   // installing an update on this PC (Ovis or herdr; a check installs too where OVIS_AUTO_UPDATE=1) is the owner's, as changing its PCs is (machine-api.ts): from any device
   // he signed in or paired himself. The connection server's bridge token asks its own install by revision (bridgeUpdatePath)
   if (request.method === "POST" && (pathname === "/api/updates/install" || pathname === "/api/updates/cancel" || pathname === "/api/updates/check" || pathname === "/api/herdr/update") && !ownerAccess(access) && !(bridgeAuthorized && bridgeUpdatePath)) {
@@ -762,13 +767,13 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       // a forced answer (tests) and a runtime without the PTY sidecar are told the way a Windows herdr's own would be
       const herdr = attachableIdentity(info, sidecar);
       // this server's own version (package.json, embedded in the compiled binary), told with the other facts to a client that got in
-      return jsonResponse({ ok: true, herdr, auth, ...(access.level === "full" ? { version } : {}), ...relay, ...exposure, ...(security ? { security } : {}), ...(herdr_core ? { herdr_core } : {}), ...(herdr_runtime ? { herdr_runtime } : {}), ...(account_devices ? { account_devices } : {}),
+      return jsonResponse({ ok: true, herdr, auth, ...(access.level === "full" ? { version } : {}), ...relay, ...exposure, ...(security ? { security } : {}), ...(herdr_core ? { herdr_core } : {}), ...(herdr_runtime ? { herdr_runtime } : {}), ...(account_devices ? { account_devices } : {}), ...(options.updatesOff ? { updates_off: true } : {}),
         web_ui: { boot_id: bootId, revision: process.env["OVIS_REVISION"] ?? null, ...(serverId ? { server_id: serverId } : {}) } }, 200, securityHeaders);
     } catch (error) {
       const failed = errorResponse(error);
-      if (!lan_exposure && !direct_exposure) return failed;
+      if (!lan_exposure && !direct_exposure && !options.updatesOff) return failed;
       const body: unknown = await failed.json();
-      return jsonResponse({ ...(body !== null && typeof body === "object" ? body : {}), ...exposure }, failed.status, { "cache-control": "no-store" });
+      return jsonResponse({ ...(body !== null && typeof body === "object" ? body : {}), ...exposure, ...(options.updatesOff ? { updates_off: true } : {}) }, failed.status, { "cache-control": "no-store" });
     }
   }
 

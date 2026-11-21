@@ -833,6 +833,8 @@ export interface HealthInfo {
   herdr_core?: HerdrCoreFacts;
   /** a driving owner only; absent from an older server */
   herdr_runtime?: HerdrRuntimeFacts;
+  /** present only while OVIS_UPDATES_OFF=1: every update answers 403 `updates_off` */
+  updates_off?: true;
 }
 
 export async function fetchHealth(): Promise<HealthInfo> {

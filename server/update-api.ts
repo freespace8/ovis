@@ -57,6 +57,9 @@ export function connectUpdater(channel?: SupervisorChannel): UpdateService {
   };
 }
 
+/** OVIS_UPDATES_OFF=1: every route that installs or updates software answers this */
+export const updatesOffResponse = (): Response => jsonResponse({ error: { code: "updates_off", message: "Updates are turned off on this server (OVIS_UPDATES_OFF)." } }, 403);
+
 /**
  * Whether an update POST came from this app's own controls. A custom header is not
  * submit-able by an HTML form. Cross-origin preflights are refused (no CORS headers);

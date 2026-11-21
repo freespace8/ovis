@@ -123,6 +123,10 @@ describe("Manage PC's menu", () => {
     expect(waiting(ssh())).toEqual([]);
   });
 
+  it("offers no bridge update while updates are turned off on the server", () => {
+    expect(manageActions(ssh(), { busy: false, canHide: true, updatesOff: true }).map(({ id }) => id)).toEqual(["rename", "toggle", "setup", "hide", "remove"]);
+  });
+
   it("offers no SSH setup or bridge update for a PC reached through the relay or by its address", () => {
     expect(ids(ssh({ kind: "relay", target: undefined }))).toEqual(["rename", "toggle", "hide", "remove"]);
     expect(ids(ssh({ kind: "address", target: undefined }))).toEqual(["rename", "toggle", "hide", "remove"]);

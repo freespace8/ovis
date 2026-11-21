@@ -130,6 +130,7 @@ const BASE: Record<string, string> = {
   "{current} of {total}": "第 {current} 个，共 {total} 个",
   "Recent folders": "最近的文件夹",
   "Dismiss": "关闭",
+  "Updates are turned off on this server.": "此服务器已关闭更新。",
   "Input line": "输入框",
   "Settings": "设置",
   "PCs": "PC",

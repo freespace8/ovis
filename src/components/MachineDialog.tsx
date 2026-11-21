@@ -12,6 +12,7 @@ import { BridgeUpdateProgress, OwnOvisAddress, ownOvisAction } from "./MachineSi
 import "./Machines.css";
 import { useT } from "../lib/i18n.ts";
 import { ExternalLink } from "../lib/externalLink.ts";
+import { useUpdatesOff } from "../lib/updatesOff.ts";
 import { asksChoice, FoundHerdrChoices, HerdrSessionChoices, type HerdrChoice } from "./FoundHerdrChoices.tsx";
 
 export function MachineDialog({ machine, preset, updateRemote = false, onClose, onConnected }: { machine?: Machine; preset?: AddPcPreset; updateRemote?: boolean; onClose(): void; onConnected(id: string): void }) {
@@ -41,7 +42,8 @@ export function MachineDialog({ machine, preset, updateRemote = false, onClose, 
   const [pending, setPending] = useState(false);
   const finished = !!job && ["failed", "cancelled", "connected"].includes(job.phase);
   const secretAllowed = window.isSecureContext;
-  const needsBridgeUpdate = job?.phase === "failed" && job.action_required === "update_bridge";
+  const updatesOff = useUpdatesOff();
+  const needsBridgeUpdate = !updatesOff && job?.phase === "failed" && job.action_required === "update_bridge";
   const startupFailed = job?.phase === "starting" && job.action_required === "windows_start_failed";
   const waitingForLogin = job?.phase === "starting" && (job.action_required === "windows_login" || startupFailed);
   const choosing = job?.action_required === "choose_herdr" && asksChoice(job.error, job.found_herdr_sessions ?? [], job.found_ovis ?? []);

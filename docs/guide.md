@@ -1176,6 +1176,7 @@ Each `OVIS_*` variable was called `HERDR_WEB_*` before Ovis took its name (`OVIS
 | `OVIS_OPENAI_API_KEY` | unset | OpenAI API key for [voice input](#voice-input). Set here, it cannot be changed from the app |
 | `OVIS_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root for voice input |
 | `OVIS_AUTO_UPDATE` | `0` | `1` installs new releases without asking |
+| `OVIS_UPDATES_OFF` | `0` | `1` turns off every update: Ovis's, herdr's, herdr-core's install and the bridge updates of other PCs answer `403 updates_off`, and the page hides its update controls |
 | `OVIS_UPDATE_CHANNEL` | unset (`stable`) | `beta` also offers the [beta builds](#beta-builds) made from main; `stable` turns them off whatever the state dir's `update-channel` file says |
 | `OVIS_TELEMETRY` | unset (on) | `0` sends no [anonymous usage counts](#anonymous-usage-counts), whatever the switch in Settings says. `DO_NOT_TRACK=1` does the same |
 | `OVIS_PUSH_SUBJECT` | this repository's URL | VAPID contact URL or `mailto:` address |
@@ -1192,6 +1193,8 @@ Each `OVIS_*` variable was called `HERDR_WEB_*` before Ovis took its name (`OVIS
 ## Updates
 
 `bun run start` and the plugin look for a newer **release** 10 seconds after start and then every 5 minutes. A release is a `vX.Y.Z` tag ([changelog](../CHANGELOG.md)); commits between releases never reach installs. When a new version is out, a line under the header names it, and its **Update** button installs it and shows the install's steps; **Settings → Updates** has the same controls and the full error when an install fails. The release's notes are there too, under **What's new**: every release the update installs, newest first, as a short list of what is new, improved and fixed in the app's language, with **Show every change** opening that release's changelog, and the line's **What's new** button opens Settings on them. After the update and the reload, the line says which version now runs, with the same **What's new** button, until you close it; **Settings → Updates** keeps the notes under **What the last update brought**. To install releases without asking, set `OVIS_AUTO_UPDATE=1`.
+
+Start the server with `OVIS_UPDATES_OFF=1` to keep it, and the herdr it serves, from being updated or restarted by an update: the server refuses every update request, the page shows no update line or button, and Settings → About says updates are turned off.
 
 An update is built and typechecked in a private checkout while the current server keeps serving. The new server must pass a health check, or the previous build comes back. herdr and your agents keep running, and a **Reload app** notice lets you save drafts before the new frontend loads.
 

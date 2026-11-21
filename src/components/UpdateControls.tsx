@@ -4,6 +4,7 @@ import { CHECKOUT_CHANGED_REASON, DESKTOP_APP_UPDATES, SUMMARY_GROUPS, type Summ
 import { useHerdrUpdate } from "../lib/herdrUpdate.ts";
 import { runningAppVersion, runningHerdrVersion, staleClientVersion, versionLabel } from "../lib/runningVersion.ts";
 import { useSettings } from "../lib/settings.ts";
+import { useUpdatesOff } from "../lib/updatesOff.ts";
 import { announcesUpdate, readAnnounced, readOfferClosed, summaryFor, watchAnnounced, watchOfferClosed, writeAnnounced, writeOfferClosed } from "../lib/updateNotes.ts";
 import { describeUpdate } from "../lib/updateProgress.ts";
 import type { UpdatesModel } from "../lib/updates.ts";
@@ -96,6 +97,11 @@ export function UpdateControls({ updates, bridgesFollow = false }: { updates: Up
     : status?.blocked_reason ? blockedReasonWords(status.blocked_reason, t) : null;
   const blocked = restart && status?.blocked_reason === CHECKOUT_CHANGED_REASON ? null : reason;
   const bare = useContext(SettingsBare);
+  const updatesOff = useUpdatesOff();
+  if (updatesOff) return <section className="settings-section settings-updates" data-section="updates" tabIndex={-1} aria-labelledby="settings-updates-title">
+    <h3 id="settings-updates-title" className={bare === true ? "visually-hidden" : undefined}>{t("Updates")}</h3>
+    <div className="settings-card"><p className="settings-item settings-hint" role="status">{t("Updates are turned off on this server.")}</p></div>
+  </section>;
   if (bare && !installing && !needsReload && failure === null && !error && !status?.error && !blocked && !tabVersion) {
     const state = busy ? t("Checking for updates…") : status?.available ? t("Version {version} is available.", { version: versionLabel(status.latest_version, status.latest_revision) ?? "" }) : status?.checked_at ? t("Up to date.") : null;
     return <section className="settings-section settings-updates" data-section="updates" tabIndex={-1} aria-labelledby="settings-updates-title">
@@ -146,9 +152,11 @@ export function UpdateControls({ updates, bridgesFollow = false }: { updates: Up
  */
 export function HerdrUpdateControls({ enabled, herdrVersion, showVersion = false }: { enabled: boolean; herdrVersion: string | null; showVersion?: boolean }) {
   const t = useT();
-  const { status, error, busy, request } = useHerdrUpdate(enabled);
+  const updatesOff = useUpdatesOff();
+  const { status, error, busy, request } = useHerdrUpdate(enabled && !updatesOff);
   const version = runningHerdrVersion(status, herdrVersion);
   const bare = useContext(SettingsBare);
+  if (updatesOff) return null;
   if (bare && !(status?.supported && ((status.stale && !!status.binary_version && !!status.server_version) || error || busy || status.output || status.phase === "error"))) {
     return status?.supported || (showVersion && version) ? <section className="settings-section settings-herdr-update">
       <div className="settings-card">

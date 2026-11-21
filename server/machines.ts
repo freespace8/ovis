@@ -350,6 +350,8 @@ export class MachineManager {
   private now: () => number;
   private sourceToken = 0;
   private sourceStarts = new Map<string, number>();
+  /** OVIS_UPDATES_OFF: a PC that needs a newer bridge waits for a person instead of being updated in the background */
+  private readonly updatesOff: boolean;
   private ownUpdatePollMs: number;
   private ownUpdateStartMs: number;
   private ownUpdateCheckMs: number;
@@ -379,7 +381,8 @@ export class MachineManager {
   private readonly sshCandidateOptions: SshCandidatesOptions;
 
   constructor(readonly stateDir: string, private push: PushService, private completions: CompletionTracker, private readLocal: () => Promise<SessionSnapshot> = () => this.completions.readSnapshot(sessionSnapshot, labelOmoPanes),
-    options: { restoreReplaced?: () => boolean; bootId?: string; localFinishEpoch?: () => string; now?: () => number; ownUpdate?: { pollMs?: number; startMs?: number; checkMs?: number; offerMs?: number }; moveOfferMs?: { idle: number; active: number }; relaySocket?: (url: string) => RelaySocket; relayDirectSocket?: (url: string) => RelaySocket; serverId?: () => string | undefined; tailnet?: TailnetPcsOptions; sshCandidates?: SshCandidatesOptions } = {}) {
+    options: { restoreReplaced?: () => boolean; bootId?: string; localFinishEpoch?: () => string; now?: () => number; ownUpdate?: { pollMs?: number; startMs?: number; checkMs?: number; offerMs?: number }; moveOfferMs?: { idle: number; active: number }; relaySocket?: (url: string) => RelaySocket; relayDirectSocket?: (url: string) => RelaySocket; serverId?: () => string | undefined; tailnet?: TailnetPcsOptions; sshCandidates?: SshCandidatesOptions; updatesOff?: boolean } = {}) {
+    this.updatesOff = options.updatesOff === true;
     this.bootId = options.bootId;
     this.tailnet = new TailnetPcs(options.tailnet);
     this.sshCandidateOptions = options.sshCandidates ?? (options.tailnet?.readStatus === undefined ? {} : { readStatus: options.tailnet.readStatus });
@@ -2078,7 +2081,7 @@ export class MachineManager {
       runtime.machine.found_ovis = error.foundOvis;
       this.emit();
       // SSH itself just worked without a password, so the update can run unattended
-      if (error.action === "update_bridge" && this.preferences.auto_update_bridges && this.mayManageBridge(runtime) && !runtime.updateCancelled) this.queueAutoUpdate(runtime.machine.id);
+      if (error.action === "update_bridge" && !this.updatesOff && this.preferences.auto_update_bridges && this.mayManageBridge(runtime) && !runtime.updateCancelled) this.queueAutoUpdate(runtime.machine.id);
       return;
     }
     runtime.machine.action_required = error instanceof MachineActionRequired ? error.action : null;

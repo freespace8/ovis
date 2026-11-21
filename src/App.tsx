@@ -80,6 +80,7 @@ import type { AppActions, PaneView, PaneControls } from "./lib/actions.ts";
 import { removePushSubscription } from "./lib/push.ts";
 import { resetPushHealth, usePushHealth } from "./lib/pushHealth.ts";
 import { useUpdates } from "./lib/updates.ts";
+import { UpdatesOffContext, updatesState } from "./lib/updatesOff.ts";
 import { desktopUpdateBridge, useDesktopUpdate } from "./lib/desktopUpdate.ts";
 import { DesktopUpdateNotice, UpdateNotice } from "./components/UpdateControls.tsx";
 import { LanExposureNotice } from "./components/LanExposureNotice.tsx";
@@ -262,7 +263,9 @@ export function App() {
   // the owner makes private links: a driving sign-in that is neither the open LAN, Portal nor a link (server/access.ts ownerAccess)
   const linkOwner = auth?.authenticated === true && auth.role === "drive" && auth.via !== "open" && auth.via !== "portal" && auth.via !== "link";
   const { pairedNotices, setPairedNotices, dismissPairedNotice, relayPairings, setRelayPairings, remotePairings, setRemotePairings, removedNotices, setRemovedNotices, dismissRemovedNotice, pendingKeys, setPendingKeys, clearPendingKeys } = usePairedNotices(pendingAccess);
-  const updates = useUpdates(locked === false && !linkVisitor);
+  const updatesAnswer = updatesState(health);
+  const updatesOff = updatesAnswer === "off";
+  const updates = useUpdates(locked === false && !linkVisitor && updatesAnswer === "on");
   const desktopUpdate = useDesktopUpdate();
   const { selectedPaneId, setSelectedPaneId, notificationViewTarget, setNotificationViewTarget, terminalPeek, setTerminalPeek, endPeek, pendingLink, linkLanded, setLinkLanded, rosterSeq, linkSince, selectionSince, rosterTick, setRosterTick, linkTick, setLinkTick } = useSelectionState({ initialLink });
   const { otherRecheck, otherRosterTick, setOtherRosterTick } = useSplitRecheck();
@@ -949,7 +952,7 @@ export function App() {
   );
 
   return (
-    <MachineSessionsProvider sessions={machineSessions} machineIds={machines.map((machine) => machine.id)}><MachineContext.Provider value={selectedMachineId}><AppLayoutContext.Provider value={appLayout}><div className={`app${(inMode ? !inboxWide : sidebarCollapsed) ? " sidebar-collapsed" : ""}${inMode ? " is-inbox" : ""}${listScreen ? " is-inbox-list" : ""}${inboxWide ? " is-inbox-wide" : ""}${inboxWide && !inbox.shown && selectedPane !== null && !chatShown ? " is-inbox-terminal" : ""}${tabRoom ? " is-inbox-tab-room" : ""}`} style={sidebarWidth === null && filePanelWidth === null ? undefined : {
+    <UpdatesOffContext.Provider value={updatesOff}><MachineSessionsProvider sessions={machineSessions} machineIds={machines.map((machine) => machine.id)}><MachineContext.Provider value={selectedMachineId}><AppLayoutContext.Provider value={appLayout}><div className={`app${(inMode ? !inboxWide : sidebarCollapsed) ? " sidebar-collapsed" : ""}${inMode ? " is-inbox" : ""}${listScreen ? " is-inbox-list" : ""}${inboxWide ? " is-inbox-wide" : ""}${inboxWide && !inbox.shown && selectedPane !== null && !chatShown ? " is-inbox-terminal" : ""}${tabRoom ? " is-inbox-tab-room" : ""}`} style={sidebarWidth === null && filePanelWidth === null ? undefined : {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
     } as CSSProperties}>
@@ -1155,8 +1158,8 @@ export function App() {
         <OpenFileContext.Provider value={selectedPaneId !== null ? viewFile : null}>
         <WebPanelContext.Provider value={openWebPage}>
         <div className={`pane-column${chatShown ? " is-chat" : ""}`} inert={drawerModal || undefined}>
-        <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
-        <DesktopUpdateNotice update={desktopUpdate} />
+        {!updatesOff && <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />}
+        {!updatesOff && <DesktopUpdateNotice update={desktopUpdate} />}
         <TelemetryNotice enabled={locked === false && !linkVisitor && setupGuide.settled && !guideShown} onOpen={() => { setSettingsLinkPage("about"); setSettingsLinkSection("telemetry"); setSettingsOpen(true); }} />
         <MachineActionBanner machines={machines} onSetup={(machine, update = false) => { setDrawerOpen(false); setUpdateRemote(update); setMachineDialog(machine); }} />
         {layoutNotice && <p className="pane-notice" role="alert">{layoutNotice}</p>}
@@ -1454,6 +1457,6 @@ export function App() {
       <CommandPalette key={selectedMachineId} machines={sidebarMachines} onSelect={selectTarget} open={paletteOpen} initialQuery={paletteQuery} onClose={() => setPaletteOpen(false)} snapshot={snapshot} online={selectedMachine?.state === "connected"} selectedPaneId={selectedPaneId}
         view={terminalPeek !== null ? "terminal" : view} actions={actions} watching={auth?.role === "watch"} inboxMode={inMode} />
       <MarkdownLinkMenu />
-    </div></AppLayoutContext.Provider></MachineContext.Provider></MachineSessionsProvider>
+    </div></AppLayoutContext.Provider></MachineContext.Provider></MachineSessionsProvider></UpdatesOffContext.Provider>
   );
 }

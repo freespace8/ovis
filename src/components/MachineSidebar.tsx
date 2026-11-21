@@ -34,6 +34,7 @@ import { useEdgeFades } from "../lib/useEdgeFades.ts";
 import "./Machines.css";
 import "./SidebarSections.css";
 import { useT } from "../lib/i18n.ts";
+import { useUpdatesOff } from "../lib/updatesOff.ts";
 import { asksChoice, FoundHerdrChoices } from "./FoundHerdrChoices.tsx";
 import { useSettings } from "../lib/settings.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
@@ -335,14 +336,14 @@ export function removablePc(machine: Pick<Machine, "kind" | "state" | "herdr_pro
 }
 
 /** `canLink`: the owner makes private links, to this PC's own session and to the sessions found on it. */
-export function manageActions(machine: Pick<Machine, "kind" | "herdr_profile_id" | "enabled" | "target" | "action_required">, { busy, canHide, canLink = false }: { busy: boolean; canHide: boolean; canLink?: boolean }): { id: ManageAction; disabled: boolean }[] {
+export function manageActions(machine: Pick<Machine, "kind" | "herdr_profile_id" | "enabled" | "target" | "action_required">, { busy, canHide, canLink = false, updatesOff = false }: { busy: boolean; canHide: boolean; canLink?: boolean; updatesOff?: boolean }): { id: ManageAction; disabled: boolean }[] {
   const own = !machine.herdr_profile_id && machine.kind !== "local" && machine.kind !== "hc" && machine.kind !== "session";
   const reachable = machine.enabled && Boolean(machine.target);
   const actions: { id: ManageAction; disabled: boolean }[] = [];
   if (own) actions.push({ id: "rename", disabled: busy }, { id: "toggle", disabled: busy });
   if (machine.kind === "ssh") {
     if (machine.action_required !== "setup" && machine.action_required !== "connect") actions.push({ id: "setup", disabled: !reachable });
-    if (machine.action_required !== "connect") actions.push({ id: "update", disabled: !reachable });
+    if (machine.action_required !== "connect" && !updatesOff) actions.push({ id: "update", disabled: !reachable });
   }
   if (canLink && (machine.kind === "local" || machine.kind === "session")) actions.push({ id: "link", disabled: busy });
   if (canHide && machine.kind !== "local") actions.push({ id: "hide", disabled: busy });
@@ -363,6 +364,7 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
   const [name, setName] = useState(machine.name);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const updatesOff = useUpdatesOff();
   const online = machine.state === "connected";
   const noticed = Boolean(machine.action_required || machine.updating);
   const stateWord = useAnnouncedText(noticed ? null : t(STATE_WORD[machine.state]));
@@ -420,7 +422,7 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
   const manageNote = machine.kind === "hc" ? t("A machine of herdr-core. Add, rename or remove it with hc machine or in the Herdr app.") : machine.kind === "session" ? t("Another herdr session on this PC. It is listed while that session runs.") : machine.herdr_profile_id ? t("Managed by herdr. Rename, disable or remove it there.") : null;
   // the owner's page offers private links (App.tsx), to this PC's own session and to the sessions found on it
   const canLink = props.actions.openSessionLinks !== undefined;
-  const manageItems = (): RowMenuItem[] => manageActions(machine, { busy, canHide, canLink }).map(({ id, disabled }): RowMenuItem => {
+  const manageItems = (): RowMenuItem[] => manageActions(machine, { busy, canHide, canLink, updatesOff }).map(({ id, disabled }): RowMenuItem => {
     switch (id) {
       case "link": return { id, disabled, label: t("Private link…"), icon: Link, run: () => props.actions.openSessionLinks?.(machine) };
       case "rename": return { id, disabled, label: t("Rename…"), icon: Pencil, run: () => { setName(machine.name); setRenaming(true); } };
@@ -535,6 +537,7 @@ export function BridgeUpdateProgress({ update }: { update: MachineUpdate }) {
 
 function MachineActionNotice({ machine, onSetup }: { machine: Machine; onSetup(machine: Machine, update?: boolean): void }) {
   const t = useT();
+  const updatesOff = useUpdatesOff();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (request: () => Promise<unknown>) => {
@@ -550,6 +553,9 @@ function MachineActionNotice({ machine, onSetup }: { machine: Machine; onSetup(m
       {error && <p className="machine-error" role="alert">{error}</p>}
     </div>;
   }
+  if (updatesOff && machine.action_required === "update_bridge") return <div className="machine-action" role="status">
+    <p className="machine-action-text"><strong>{t("Bridge update needed")}</strong><span>{t("Updates are turned off on this server.")}</span></p>
+  </div>;
   if (machine.action_required === "connect") return <div className="machine-action is-setup" role="status">
     <p className="machine-action-text"><strong>{t("Saved in herdr")}</strong><span>{t("Connect once to enable automatic reconnection. Installation and startup need separate approval.")}</span></p>
     <button type="button" className="btn btn-primary" onClick={() => onSetup(machine, false)}>{t("Connect")}</button>
@@ -640,6 +646,7 @@ function urlHost(url: string): string {
 
 export function MachineActionBanner({ machines, onSetup }: { machines: Machine[]; onSetup(machine: Machine, update?: boolean): void }) {
   const t = useT();
+  const updatesOff = useUpdatesOff();
   const [dismissed, setDismissed] = useState(readDismissed);
   useEffect(() => {
     const kept = keepDismissed(dismissed, machines);
@@ -652,7 +659,7 @@ export function MachineActionBanner({ machines, onSetup }: { machines: Machine[]
       <span>{t(running.updating.ovis ? "Updating {name}'s own Ovis" : "Updating the bridge on {name}", { name: running.name })}{view ? ` · ${t(view.label)}${view.percent === null ? "" : ` ${view.percent}%`}` : "…"}</span>
     </div>;
   }
-  const waiting = waitingMachines(machines, dismissed);
+  const waiting = waitingMachines(machines, dismissed).filter((machine) => !(updatesOff && machine.action_required === "update_bridge"));
   const first = waiting[0];
   if (!first) return null;
   const conflict = first.action_required === "bridge_conflict";

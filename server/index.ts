@@ -187,6 +187,8 @@ export function createServer(
     devinDbPath?: string;
     hermesHome?: string;
     updates?: UpdateService;
+    /** OVIS_UPDATES_OFF=1, read once in serve(): every update and install of software answers 403 `updates_off`, and the page hides its update controls */
+    updatesOff?: boolean;
     herdrUpdate?: HerdrUpdater;
     herdrCoreFacts?: () => HerdrCoreFacts | undefined;
     runtimeService?: RuntimeService;
@@ -890,7 +892,7 @@ export async function serve(): Promise<void> {
   if (lanConfig !== null && "error" in lanConfig) console.error(`LAN HTTPS is off: ${lanConfig.error}.`);
   let instance: ReturnType<typeof createServer>;
   try {
-    instance = createServer({ updates, ...(profile ? { profile: "machine", machineRefusal, port: Number(startEnv["PORT"] ?? 0) } : { herdrUpdate: new HerdrUpdater(), herdrCoreFacts, herdrCoreInstaller: herdrCoreInstaller(),
+    instance = createServer({ updates, updatesOff: process.env["OVIS_UPDATES_OFF"] === "1", ...(profile ? { profile: "machine", machineRefusal, port: Number(startEnv["PORT"] ?? 0) } : { herdrUpdate: new HerdrUpdater(), herdrCoreFacts, herdrCoreInstaller: herdrCoreInstaller(),
       launchAccepted: () => launchAccepted,
       runtimeService: runtimeService({ stateDir, port: Number(startEnv["PORT"] || DEFAULT_PORT), serving: choice.runtime, source: choice.source, ...(fallback ? { fallback } : {}), env: startEnv, core: herdrCoreFacts, accepted: () => launchAccepted, restart: (id) => process.send?.({ type: "runtime-restart", id }) }) }),
       portal, relay, tailnet, telemetry, registerBridge: true, herdrProfiles: readHerdrProfiles, herdrSessions: { read: async () => (await discoverPinnableHerdrSessions()).sessions }, shellAgents: new ShellAgentLocator(), agentDetector: new AgentDetector({ locate: catalogLocator({ probe: defaultLoginProbe() }) }), stateDir, siblingStateDir: siblingStateDir(stateDir),

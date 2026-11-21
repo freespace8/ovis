@@ -76,6 +76,7 @@ import { PushTestControls } from "./PushTestControls.tsx";
 import { AlertWebhookGroup } from "./AlertWebhookGroup.tsx";
 import { previewAlertSound, unlockAlertSound } from "../lib/alertSound.ts";
 import { HerdrUpdateControls, UpdateControls } from "./UpdateControls.tsx";
+import { useUpdatesOff } from "../lib/updatesOff.ts";
 import { TelemetryControls } from "./TelemetryControls.tsx";
 import { AgentsSettings } from "./AgentsSettings.tsx";
 import { AgentGroupNames } from "./AgentGroupNames.tsx";
@@ -1521,10 +1522,11 @@ function DamagedPcFiles({ pcSettings }: { pcSettings: MachineSettings | null }) 
 
 function RemotePcsMore({ machines, pcSettings, pcSettingsError, onPcSettings }: { machines: readonly Machine[]; pcSettings: MachineSettings | null; pcSettingsError: string | null; onPcSettings: (patch: Partial<MachineSettings>) => void }) {
   const t = useT();
+  const updatesOff = useUpdatesOff();
   return (
     <SettingsGroup section="remote-more">
       {/* the switch is the server's and waits for its answer; Add PC never does */}
-      {pcSettings && (
+      {pcSettings && !updatesOff && (
         <SettingsRow label={t("Update PC bridges automatically")} description={t("When an app update needs a newer bridge, PCs that connect with their saved key are updated in the background. PCs that need a password ask first.")}>
           <Toggle label={t("Update PC bridges automatically")} checked={pcSettings.auto_update_bridges} onChange={(auto_update_bridges) => onPcSettings({ auto_update_bridges })} />
         </SettingsRow>

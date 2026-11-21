@@ -12,7 +12,7 @@ import { TargetAccountPcError } from "../shared/relay-channel.ts";
 import { TailnetPcError } from "./tailnet-pcs.ts";
 import { canSendSecret, sameOrigin } from "./machine-security.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
-import { updateRequestAllowed } from "./update-api.ts";
+import { updateRequestAllowed, updatesOffResponse } from "./update-api.ts";
 import { crossSiteFileRead, FILE_POLICY, pagePolicy } from "./file-view.ts";
 import { snapshotWithoutHiddenTokens, withoutHiddenTokens } from "./herdr-sidebar.ts";
 import { parseJson, readCapped, REMOTE_LIMITS, RemoteResponseInvalid, RemoteResponseTooLarge } from "./remote-json.ts";
@@ -126,7 +126,9 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
   /** this PC's owner (access.ts ownerAccess): only they may start or stop updates of its PCs */
   owner = false,
   /** OVIS_ACCOUNT_OPENS_ALL is on here: only then does the roster carry a block to another PC's account records */
-  accountOpensAll = false, source?: Pick<DeviceStore, "accountPolicyActive" | "accountError">): Promise<Response> {
+  accountOpensAll = false, source?: Pick<DeviceStore, "accountPolicyActive" | "accountError">,
+  /** OVIS_UPDATES_OFF: no PC is installed on or updated from here */
+  updatesOff = false): Promise<Response> {
   const url = new URL(request.url);
   // A PC's file opens as this PC's /api/fs/file does, from any navigation: reading it changes
   // nothing, and Chrome on Android shows a PDF in the viewer's frame as an "Open" button whose
@@ -152,6 +154,9 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
     if (source.accountError !== null) return fail("pc_add_account_unavailable", "Can't add a PC right now. Try again in a moment.", 409);
     return fail("pc_add_source_bound", "This PC is in an account. Add PCs from your account.", 409);
   }
+  // installing Ovis on a PC, updating one or all of them, and a herdr-core install on one (the setup route refuses its update below)
+  const installsOrUpdates = request.method === "POST" && (parts[0] === "install" && parts.length === 1 || parts[0] === "update-all" || parts.length === 2 && (parts[1] === "update" || parts[1] === "update-bridge") || path === "runtime/move/install");
+  if (updatesOff && installsOrUpdates) { setRequestRoute("updates-off"); return updatesOffResponse(); }
   try {
     if (!parts.length && request.method === "GET") {
       setRequestRoute("/api/machines");
@@ -366,6 +371,7 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       if (parts.length === 1 && request.method === "POST") {
         setRequestRoute("/api/machines/setup");
         const body = await request.json() as SetupRequest;
+        if (updatesOff && body.update_remote === true) return updatesOffResponse();
         // a setup that updates what runs there is an update of that PC: the owner's only, as above
         // the addresses its one-job-per-PC check compares, resolved first (ssh -G, off the event loop, 3 s at most)
         await manager.resolveFor(body);

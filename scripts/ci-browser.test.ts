@@ -206,6 +206,7 @@ const MANUAL_BROWSER_SCRIPTS = [
   "scripts/skill-activity-browser-qa.ts",
   "scripts/terminal-arrows-core-regression.ts", // a real hc (OVIS_TEST_HC_BIN), which no browser lane installs
   "scripts/terminal-file-links-regression.ts",
+  "scripts/updates-off-browser-qa.ts", // two servers, one with updates on as the control: run by hand with `bun run check run --build`
   "scripts/update-browser-qa.ts", // a private Git remote and install (docs/app-updates.md)
   "scripts/windows-lens-browser-qa.ts",
   "scripts/windows-terminal-browser-qa.ts", // native Windows: .github/workflows/windows-terminal-qa.yml

@@ -203,7 +203,7 @@ export async function runSupervisor(root = ROOT) {
   }
   const pluginRoot = process.env["HERDR_PLUGIN_ROOT"];
   const launched = typeof process.send === "function";
-  const updater = new Updater({ root, stateDir, autoUpdate: process.env["OVIS_AUTO_UPDATE"] === "1", publish,
+  const updater = new Updater({ root, stateDir, autoUpdate: process.env["OVIS_AUTO_UPDATE"] === "1" && process.env["OVIS_UPDATES_OFF"] !== "1", publish,
     channel: () => updateChannel(process.env, appStateDir),
     pluginCheckout: pluginRoot !== undefined && resolve(pluginRoot) === root,
     // the herdr plugin's launcher runs this compiled server from its checkout's .ovis/server: herdr updates it

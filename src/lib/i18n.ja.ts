@@ -128,6 +128,7 @@ const BASE: Record<string, string> = {
   "{current} of {total}": "{total}件中{current}件目",
   "Recent folders": "最近のフォルダー",
   "Dismiss": "閉じる",
+  "Updates are turned off on this server.": "このサーバーでは更新がオフになっています。",
   "Input line": "入力欄",
   "Settings": "設定",
   "PCs": "PC",
