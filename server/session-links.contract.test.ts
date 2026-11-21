@@ -167,6 +167,21 @@ describe("a private link to a herdr session", () => {
     await fetch(`${base()}/api/session-links/${created.id}`, { method: "DELETE", headers: owner });
   });
 
+  it("is not made on a server open to the network, where a stranger already has full access", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ovis-session-links-open-"));
+    const open = createServer({ port: 0, stateDir: dir, registerBridge: false, hostname: "0.0.0.0" });
+    try {
+      const response = await fetch(`http://127.0.0.1:${open.port}/api/session-links`, { method: "POST", headers: { "x-herdr-machine": "1" }, body: JSON.stringify({ machine_id: "local" }) });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ error: { code: "server_open" } });
+      const listed = await (await fetch(`http://127.0.0.1:${open.port}/api/session-links`)).json() as unknown[];
+      expect(listed).toEqual([]);
+    } finally {
+      open.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("answers an unknown token with the 404 of any unknown address and sets no cookie", async () => {
     const response = await fetch(`${base()}/s/${"A".repeat(43)}`, { redirect: "manual" });
     expect(response.status).toBe(404);

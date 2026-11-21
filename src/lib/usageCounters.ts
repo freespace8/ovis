@@ -19,6 +19,7 @@ import { harnessOf, type TelemetryAction, type TelemetryActionSource, type Telem
 import type { PaneView } from "./actions.ts";
 import { changeTelemetry, fetchTelemetry, onTelemetryStatus } from "./api.ts";
 import { SHEET_QUERY } from "./sheets.ts";
+import { accessKnown, linkMachine } from "./transport.ts";
 
 export const FLUSH_MS = 60_000;
 
@@ -173,7 +174,8 @@ export type UsageCounters = ReturnType<typeof createUsageCounters>;
 export const usageCounters: UsageCounters = createUsageCounters({
   on: COUNTS_ON,
   send: (counts, keepalive) => changeTelemetry({ counts }, { keepalive }),
-  status: fetchTelemetry,
+  // a private link's page counts nothing: telemetry is the PC owner's to consent to
+  status: async () => { await accessKnown; return linkMachine() !== null ? null : fetchTelemetry(); },
   narrow: () => typeof window !== "undefined" && window.matchMedia?.(SHEET_QUERY).matches === true,
   now: () => Date.now(),
   setTimer: (fn, ms) => { const timer = setTimeout(fn, ms); return () => clearTimeout(timer); },

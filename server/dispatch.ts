@@ -614,7 +614,8 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       setRequestRoute("owner-refusal");
       return jsonResponse({ error: { code: "owner_only", message: "Private links are made from this PC itself, or from a device paired with it that drives." } }, 403);
     }
-    return handleSessionLinksRequest(request, pathname, ctx.services.sessionLinks, () => machines?.list().filter((machine) => machine.kind === "session").map((machine) => machine.id) ?? []);
+    return handleSessionLinksRequest(request, pathname, ctx.services.sessionLinks, () => machines?.list().filter((machine) => machine.kind === "session").map((machine) => machine.id) ?? [],
+      () => lanExposed({ hostname, tokenConfigured: token !== "", gated: devices.gated || ctx.lanHttps === true }));
   }
   if (pathname === "/api/devices" || pathname.startsWith("/api/devices/")) {
     try {

@@ -120,11 +120,15 @@ export function handleSessionLinkVisit(request: Request, pathname: string, links
  * /api/session-links, for the owner only (the caller checks): list, make and revoke. A link is made for
  * this PC's own session or for a session found on this PC, never for any other kind of machine.
  */
-export async function handleSessionLinksRequest(request: Request, pathname: string, links: SessionLinks, sessionMachines: () => readonly string[]): Promise<Response> {
+export async function handleSessionLinksRequest(request: Request, pathname: string, links: SessionLinks, sessionMachines: () => readonly string[], serverOpen: () => boolean): Promise<Response> {
   setRequestRoute(pathname === "/api/session-links" ? pathname : "/api/session-links/:id");
   if (pathname === "/api/session-links") {
     if (request.method === "GET") return jsonResponse(links.list(), 200, { "cache-control": "no-store" });
     if (request.method !== "POST") return badRequest("method_not_allowed", "use GET or POST");
+    // on an open server a stranger already drives everything, so a link would restrict nobody
+    if (serverOpen()) {
+      return jsonResponse({ error: { code: "server_open", message: "This server is open to your network, so anyone who reaches it already has full access and a link would limit nobody. Set an access token or pair a device first." } }, 409);
+    }
     const body: unknown = await request.json().catch(() => null);
     const machineId = isJsonObject(body) ? body["machine_id"] : undefined;
     if (typeof machineId !== "string" || (machineId !== LOCAL_MACHINE && !sessionMachines().includes(machineId))) {

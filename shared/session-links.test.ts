@@ -35,7 +35,7 @@ describe("what a private link reaches", () => {
       ["POST", "/api/push/subscribe"], ["GET", "/api/updates"], ["POST", "/api/updates/install"], ["POST", "/api/herdr/update"], ["GET", "/api/portal"],
       ["GET", "/api/account/status"], ["POST", "/api/account/link"], ["GET", "/api/relay"], ["POST", "/api/relay/start"], ["GET", "/api/access"],
       ["POST", "/api/runtime"], ["GET", "/api/runtime/move"], ["GET", "/api/usage"], ["GET", "/api/voice"], ["GET", "/api/cliproxy"], ["GET", "/api/fonts"],
-      ["POST", "/api/auth"], ["DELETE", "/api/auth"], ["POST", "/api/devices/pair"], ["GET", "/api/bridge"], ["GET", "/api/herdr-ui"], ["GET", "/api/system/x"],
+      ["POST", "/api/auth"], ["DELETE", "/api/auth"], ["POST", "/api/devices/pair"], ["GET", "/api/bridge"], ["GET", "/api/system/x"],
       ["POST", "/api/machines"], ["POST", "/api/machines/address"], ["POST", "/api/machines/relay"], ["GET", "/api/machines/ssh-candidates"], ["GET", "/api/machines/tailnet"],
       ["PATCH", `/api/machines/${WORK}`], ["DELETE", `/api/machines/${WORK}`], ["PATCH", "/api/machines/local"], ["POST", `/api/machines/${WORK}/update-bridge`],
       ["POST", `/api/machines/${WORK}/setup`], ["GET", `/api/machines/${WORK}/runtime/move`], ["POST", `/api/machines/${WORK}/runtime/move/install`],
@@ -53,6 +53,8 @@ describe("what a private link reaches", () => {
       expect(allows("GET", "/api/machines?verify_source_boot=local", machine)).toBe(false);
       expect(allows("GET", "/api/health", machine)).toBe(true);
       expect(allows("POST", "/api/health", machine)).toBe(false);
+      expect(allows("GET", "/api/herdr-ui", machine)).toBe(true);
+      expect(allows("POST", "/api/herdr-ui", machine)).toBe(false);
     }
   });
 

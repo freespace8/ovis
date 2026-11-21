@@ -60,7 +60,7 @@ export const MACHINES_JA: Record<string, string> = {
   "Another herdr session on this PC. It is listed while that session runs.": "この PC 上の別の herdr セッションです。そのセッションが動いている間、ここに表示されます。",
   "Create private link": "プライベートリンクを作成",
   "Private link to {name}": "{name} へのプライベートリンク",
-  "Anyone who opens a private link can operate this session with full control, and reaches nothing else on this PC. Revoke a link to end its access at once.": "プライベートリンクを開いた人は、このセッションを完全に操作でき、この PC のほかの部分にはアクセスできません。リンクを取り消すと、アクセスはすぐに終了します。",
+  "Ovis shows and serves only this one session to whoever opens a link. The terminals run as this PC's account.": "Ovis は、リンクを開いた人にこの 1 つのセッションだけを表示し、提供します。ターミナルはこの PC のアカウントで動作します。",
   "Copy this link now: it is shown only once and cannot be read back.": "このリンクを今すぐコピーしてください。表示されるのは一度だけで、後から確認することはできません。",
   "Links to this session": "このセッションへのリンク",
   "Created {when}": "{when} に作成",

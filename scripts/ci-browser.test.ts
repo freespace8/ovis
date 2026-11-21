@@ -202,6 +202,7 @@ const MANUAL_BROWSER_SCRIPTS = [
   "scripts/keyboard-viewport-demo-regression.ts",
   "scripts/machines-browser-qa.ts",
   "scripts/output-browser-qa.ts",
+  "scripts/session-links-browser-qa.ts", // a second herdr session beside the lane's: run by hand with `bun run check run --build`
   "scripts/skill-activity-browser-qa.ts",
   "scripts/terminal-arrows-core-regression.ts", // a real hc (OVIS_TEST_HC_BIN), which no browser lane installs
   "scripts/terminal-file-links-regression.ts",

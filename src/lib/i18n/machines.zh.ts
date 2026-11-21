@@ -60,7 +60,7 @@ export const MACHINES_ZH: Record<string, string> = {
   "Another herdr session on this PC. It is listed while that session runs.": "这是此 PC 上的另一个 herdr 会话。它运行期间会显示在这里。",
   "Create private link": "创建私有链接",
   "Private link to {name}": "{name} 的私有链接",
-  "Anyone who opens a private link can operate this session with full control, and reaches nothing else on this PC. Revoke a link to end its access at once.": "任何打开私有链接的人都可以完整操作此会话，且无法访问此 PC 上的其他内容。撤销链接后，其访问会立即终止。",
+  "Ovis shows and serves only this one session to whoever opens a link. The terminals run as this PC's account.": "Ovis 只向打开链接的人显示并提供这一个会话。终端以此 PC 的账户运行。",
   "Copy this link now: it is shown only once and cannot be read back.": "请立即复制此链接：它只显示这一次，之后无法再次查看。",
   "Links to this session": "此会话的链接",
   "Created {when}": "创建于 {when}",

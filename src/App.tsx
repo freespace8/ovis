@@ -528,7 +528,9 @@ export function App() {
   useAddressBar({ inbox, mode: { on: inMode, lands: inboxMode.at }, newSessionOpen, newSessionMachineId, selectedPane, selectedPaneId, selectedWorkspace, viewing, selectedMachineId, leaveFile, restoreFile, fileFromPop, forgetLeftFiles, locked, machines, snapshot, linkLanded, view, settingsOpen, settingsPage, settingsLinkPage, settingsLinkSection, wideScreen, sidebarCollapsed, newTab, newFields, autoSelected, pendingFile, selectedMachine, openFile, machinesRef, selectTargetRef, pendingLink, setLinkLanded, linkSince, rosterSeq, setNewSessionOpen, pendingCreate, newSessionPending, setHeaderNote, selectionRef });
 
 
-  const { bell, alertsOffDot } = alertsBell({ t, alertsOn, notifications, pushOn, enableNotifications, disableNotifications });
+  const { bell, alertsOffDot: alertsAreOff } = alertsBell({ t, alertsOn, notifications, pushOn, enableNotifications, disableNotifications });
+  // a private link's page offers no alerts: they register this browser's push with the PC, which a link may not do
+  const alertsOffDot = alertsAreOff && !linkVisitor;
   const connWord = t(connected ? "live" : outputStopped ? "disconnected" : connectedBefore ? "reconnecting" : "connecting");
   const headerConnection = useHeaderConnection({ scope: `${split ? split.active : soloSlot}:${selectedMachineId}`, reportedBy, connected, connectedBefore, outputStopped });
   const session = useSessionStats(selectedMachineId, selectedPane?.pane_id ?? null);
@@ -729,7 +731,7 @@ export function App() {
       inboxMode: modeOffered ? { on: inMode, go: inMode ? leaveMode : enterInbox } : null,
       toggleTheme: () => updateSettings({ theme: resolvedTheme === "dark" ? "light" : "dark" }),
       lock: canSignOut ? lock : null,
-      enableNotifications: bell.run === enableNotifications ? () => void enableNotifications() : null,
+      enableNotifications: bell.run === enableNotifications && !linkVisitor ? () => void enableNotifications() : null,
       refresh: () => void load(),
       openFiles: selectedPaneId !== null ? () => { setDrawerOpen(false); revealFiles(); } : null,
       // the page is this PC's whichever PC is selected: the browser reaches it under the app's own host,
@@ -823,7 +825,7 @@ export function App() {
     ...(selectedPane && (!wideScreen || inMode) ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: moreFilesRun(actions.counted, () => setFilesOpen(true)) }] : []),
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
     ...(linkOwner && (selectedMachine?.kind === "local" || selectedMachine?.kind === "session") ? [{ id: "session-links", label: t("Private link…"), icon: Link, run: () => actions.openSessionLinks?.(selectedMachine) }] : []),
-    { id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() },
+    ...(linkVisitor ? [] : [{ id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() }]),
     ...paneMoreItems.filter((item) => !(foldFind && item.id === "search-conversation") && (!foldPane || item.id.startsWith("pane:")))
       .map((item, index) => index === 0 ? { ...item, divider: true } : item),
     ...(foldPane && more ? [{ id: "pane-group", label: t("Pane and tab…"), icon: PanelsTopLeft, divider: true, run: () => openMoreGroup("pane", more.anchor) }] : []),

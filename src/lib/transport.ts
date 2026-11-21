@@ -1,6 +1,3 @@
-
-import { sessionLinkAllows } from "../../shared/session-links.ts";
-
 export interface WebSocketLike {
   readonly CONNECTING: 0;
   readonly OPEN: 1;
@@ -50,18 +47,19 @@ export function linkMachine(): string | null {
   return linkedMachine;
 }
 
+let linkKnown!: () => void;
+/** Settles once the server has said how this page got in (`setLinkMachine`), a private link or not. */
+export const accessKnown = new Promise<void>((resolve) => { linkKnown = resolve; });
+
 export function setLinkMachine(machineId: string | null): void {
   linkedMachine = machineId;
+  linkKnown();
 }
 
 function nativeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
   const origin = typeof location === "undefined" ? "http://localhost" : location.origin;
   const target = new URL(input instanceof Request ? input.url : String(input), origin);
-  // a private link's page does not ask what the server would refuse it
-  if (linkedMachine !== null && target.origin === origin && !sessionLinkAllows(method, target, linkedMachine)) {
-    return Promise.resolve(Response.json({ error: { code: "link_scope", message: "This private link opens one herdr session only" } }, { status: 403 }));
-  }
   const api = target.origin === origin && target.pathname.startsWith("/api/");
   // this server's API, a PC's through it included, never redirects: a redirect target's answer is no answer (S32-1)
   if (api) init = { ...init, redirect: "error" };

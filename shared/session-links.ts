@@ -20,10 +20,11 @@ export interface SessionLinkCreated extends SessionLink {
 
 /**
  * What a private link may reach: its one machine and the app that shows it, nothing else. The server
- * refuses anything else with 403 (server/dispatch.ts) and the page does not send it (src/lib/transport.ts).
+ * refuses anything else with 403 (server/dispatch.ts), and the link's page never asks for it.
  * Besides the app's own files and the routes of that machine (`MACHINE_PROXY_PATH`), a link visitor's
  * page reads, and nothing else:
  * - GET /api/health, which says who the visitor is (`auth.link`) and is open to anyone anyway;
+ * - GET /api/herdr-ui, the herdr app's own key bindings and copy-on-select, which every terminal reads when it opens;
  * - GET /api/machines and GET /api/machines/events, whose roster the server cuts down to that machine;
  * - /ws, for that machine alone.
  */
@@ -34,7 +35,7 @@ export function sessionLinkAllows(method: string, url: URL, machineId: string): 
     return asked.length === 0 ? machineId === LOCAL_MACHINE : asked.length === 1 && (asked[0] === "" ? machineId === LOCAL_MACHINE : asked[0] === machineId);
   }
   if (!pathname.startsWith("/api/")) return true;
-  if (method === "GET" && (pathname === "/api/health" || pathname === "/api/machines/events")) return true;
+  if (method === "GET" && (pathname === "/api/health" || pathname === "/api/herdr-ui" || pathname === "/api/machines/events")) return true;
   // verify_source_boot asks another machine's server for its boot
   if (method === "GET" && pathname === "/api/machines") return !searchParams.has("verify_source_boot");
   const own = /^\/api\/machines\/([^/]+)\/(.+)$/.exec(pathname);

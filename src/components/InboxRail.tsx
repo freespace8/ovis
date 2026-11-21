@@ -80,9 +80,9 @@ export function InboxRail({ onExit, onInbox, waiting, alerts, onSettings, pcs, s
             <span className="header-more-dot is-waiting" data-count={waiting.count} aria-hidden="true" />
           </button>
         )}
-        <button type="button" className="icon-button inbox-rail-item inbox-rail-alerts" aria-label={t("Alerts")} title={alerts.title} aria-pressed={alerts.on} onClick={() => { tally(() => usageCounters.count("inbox_rail_alerts")); alerts.toggle(); }}>
+        {linkMachine() === null && <button type="button" className="icon-button inbox-rail-item inbox-rail-alerts" aria-label={t("Alerts")} title={alerts.title} aria-pressed={alerts.on} onClick={() => { tally(() => usageCounters.count("inbox_rail_alerts")); alerts.toggle(); }}>
           <AlertsGlyph aria-hidden="true" />
-        </button>
+        </button>}
         {linkMachine() === null && <button type="button" className="icon-button inbox-rail-item inbox-rail-settings" aria-label={t("Settings")} title={shortcutTitle(t("Settings"), "settings")} onClick={() => { tally(() => usageCounters.count("inbox_rail_settings")); tally(() => usageCounters.count("settings_by_button")); onSettings(); }}>
           <Settings aria-hidden="true" />
         </button>}

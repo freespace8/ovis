@@ -3,6 +3,7 @@ import { apiFetch } from "./api-request-id.ts";
 import { faceArrived } from "./fontFaces.ts";
 import { sanitizeFontFamily } from "./fontFamily.ts";
 import { serverIdOfPath, serverScopePath } from "./shellMode.ts";
+import { linkMachine } from "./transport.ts";
 
 // public/sw.js's FILES, the one cache its keepShell never retires: a cache of another name is deleted on the next open
 const CACHE = "ovis-files-v1";
@@ -68,7 +69,8 @@ function addFace(font: UserFont, fonts: Pick<FontFaceSet, "add">): Promise<void>
 
 export async function addServedFonts(family: string, fonts: Pick<FontFaceSet, "add"> | undefined = typeof document === "undefined" ? undefined : document.fonts): Promise<void> {
   const names = namesIn(family);
-  if (names.length === 0 || !fonts || typeof FontFace === "undefined") return;
+  // the PC's fonts folder is not a private link's to read
+  if (names.length === 0 || !fonts || typeof FontFace === "undefined" || linkMachine() !== null) return;
   const key = names.join(",");
   let listed = lists.get(key);
   if (!listed) {

@@ -68,7 +68,7 @@ export function SessionLinksDialog({ machineId, machineName, onClose }: Props) {
           <button type="button" className="icon-button" aria-label={t("Close")} onClick={onClose}><X aria-hidden="true" /></button>
         </header>
         <div className="modal-body session-links-body">
-          <p className="session-links-note">{t("Anyone who opens a private link can operate this session with full control, and reaches nothing else on this PC. Revoke a link to end its access at once.")}</p>
+          <p className="session-links-note">{t("Ovis shows and serves only this one session to whoever opens a link. The terminals run as this PC's account.")}</p>
           {made !== null && <div className="session-links-made" role="status">
             <label htmlFor={`${id}-url`}>{t("Copy this link now: it is shown only once and cannot be read back.")}</label>
             <div className="session-links-url">

@@ -142,7 +142,7 @@ describe("the link's HTTP routes", () => {
   it("makes links only for this session or a session machine, and tells the address once", async () => {
     const links = new SessionLinks(folder());
     const ask = (method: string, path: string, body?: unknown) => handleSessionLinksRequest(
-      new Request(`https://pc.example${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), path, links, () => ["session-name-work"]);
+      new Request(`https://pc.example${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), path, links, () => ["session-name-work"], () => false);
     expect((await ask("POST", "/api/session-links", { machine_id: "ssh-pc" })).status).toBe(400);
     expect((await ask("POST", "/api/session-links", { machine_id: 4 })).status).toBe(400);
     expect((await ask("POST", "/api/session-links", {})).status).toBe(400);
@@ -158,5 +158,16 @@ describe("the link's HTTP routes", () => {
     expect((await ask("DELETE", `/api/session-links/${body.id}`)).status).toBe(200);
     expect((await ask("DELETE", `/api/session-links/${body.id}`)).status).toBe(404);
     expect((await ask("PUT", "/api/session-links")).status).toBe(400);
+  });
+
+  it("makes no link while the server is open to the network, and says what to do", async () => {
+    const links = new SessionLinks(folder());
+    const response = await handleSessionLinksRequest(new Request("https://pc.example/api/session-links", { method: "POST", body: JSON.stringify({ machine_id: "local" }) }),
+      "/api/session-links", links, () => [], () => true);
+    expect(response.status).toBe(409);
+    const error = (await response.json() as { error: { code: string; message: string } }).error;
+    expect(error.code).toBe("server_open");
+    expect(error.message).toContain("access token");
+    expect(links.list()).toEqual([]);
   });
 });

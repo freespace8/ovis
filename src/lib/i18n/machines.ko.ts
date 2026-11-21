@@ -60,7 +60,7 @@ export const MACHINES_KO: Record<string, string> = {
   "Another herdr session on this PC. It is listed while that session runs.": "이 PC의 다른 herdr 세션입니다. 해당 세션이 실행되는 동안 여기에 표시됩니다.",
   "Create private link": "비공개 링크 만들기",
   "Private link to {name}": "{name}에 대한 비공개 링크",
-  "Anyone who opens a private link can operate this session with full control, and reaches nothing else on this PC. Revoke a link to end its access at once.": "비공개 링크를 연 사람은 이 세션을 완전히 조작할 수 있으며, 이 PC의 다른 부분에는 접근할 수 없습니다. 링크를 취소하면 접근이 즉시 종료됩니다.",
+  "Ovis shows and serves only this one session to whoever opens a link. The terminals run as this PC's account.": "Ovis는 링크를 연 사람에게 이 세션 하나만 보여 주고 제공합니다. 터미널은 이 PC의 계정으로 실행됩니다.",
   "Copy this link now: it is shown only once and cannot be read back.": "지금 이 링크를 복사하세요. 한 번만 표시되며 나중에 다시 볼 수 없습니다.",
   "Links to this session": "이 세션에 대한 링크",
   "Created {when}": "{when}에 생성됨",
