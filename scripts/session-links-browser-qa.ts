@@ -90,7 +90,7 @@ async function visitorFlow(context: BrowserContext, url: string, target: Case, o
   // typing before the attach takes keys is held as a draft, never sent: wait for the live input first
   await page.locator(".conn-live").waitFor();
   await page.locator(".terminal-banner", { hasText: "Waiting for terminal input…" }).waitFor({ state: "hidden" });
-  await page.locator(".xterm").first().click();
+  await page.locator(".pane-frame.is-current .pane-terminal").click();
   await page.keyboard.type(`echo ${marker}`);
   await page.keyboard.press("Enter");
   await until(`${target.name}: typed text reaching the pane`, async () => (await paneRead({ paneId: target.pane, source: "recent" }, target.socket)).text.includes(marker) ? true : undefined);
