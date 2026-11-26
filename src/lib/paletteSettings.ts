@@ -2,6 +2,8 @@ import type { Translate } from "./i18n.ts";
 
 export type SettingsPageId = "appearance" | "chat" | "terminal" | "alerts" | "agents" | "memory" | "shortcuts" | "devices" | "experimental" | "about";
 
+/** The pages a private link's page shows: this browser's own look and input, none of the PC's settings. */
+export const LINK_SETTINGS_PAGES: ReadonlySet<SettingsPageId> = new Set(["appearance", "chat", "terminal", "shortcuts"]);
 export interface SettingsPageEntry {
   id: SettingsPageId;
   section?: string;

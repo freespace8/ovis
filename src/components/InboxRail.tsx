@@ -49,9 +49,9 @@ export function InboxRail({ onExit, onInbox, waiting, alerts, onSettings, connec
           <Monitor aria-hidden="true" />
           {dot !== null && <span className={`inbox-rail-dot is-${dot}`} aria-hidden="true" />}
         </button>
-        {linkMachine() === null && <button type="button" className="icon-button inbox-rail-item inbox-rail-settings" aria-label={t("Settings")} title={shortcutTitle(t("Settings"), "settings")} onClick={() => { tally(() => usageCounters.count("inbox_rail_settings")); tally(() => usageCounters.count("settings_by_button")); onSettings(); }}>
+        <button type="button" className="icon-button inbox-rail-item inbox-rail-settings" aria-label={t("Settings")} title={shortcutTitle(t("Settings"), "settings")} onClick={() => { tally(() => usageCounters.count("inbox_rail_settings")); tally(() => usageCounters.count("settings_by_button")); onSettings(); }}>
           <Settings aria-hidden="true" />
-        </button>}
+        </button>
       </div>
       <p className="visually-hidden" role="status">{announced}</p>
     </nav>

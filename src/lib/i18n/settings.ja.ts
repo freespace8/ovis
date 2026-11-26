@@ -313,4 +313,5 @@ export const SETTINGS_JA: Record<string, string> = {
   "{path} comes first on your terminal's PATH, so ovis runs that one.": "ターミナルの PATH で {path} が先にあるため、ovis はそちらを実行します。",
   "{dir} is not on your terminal's PATH: add it there to run ovis.": "{dir} はターミナルの PATH にありません。ovis を実行するには PATH に追加してください。",
   "Added ~/.local/bin to your PATH in {path}: open a new terminal window to run ovis.": "{path} で ~/.local/bin を PATH に追加しました。新しいターミナルウィンドウを開いて ovis を実行してください。",
+  "On a private link, these settings apply in this browser only.": "プライベートリンクでは、これらの設定はこのブラウザーにだけ適用されます。",
 };

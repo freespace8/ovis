@@ -745,7 +745,6 @@ export function App() {
         setFindRequest((request) => ({ paneId: selectedPaneId, serial: request.serial + 1 }));
       },
       openSettings: () => {
-        if (linkVisitor) return;
         setDrawerOpen(false);
         setSettingsSection(null);
         setSettingsOpen(true);
@@ -897,7 +896,7 @@ export function App() {
   ];
   const modeEndItems: RowMenuItem[] = [
     ...fromMore("alerts").map((item) => ({ ...item, divider: false })),
-    ...(linkVisitor ? [] : [{ id: "settings", label: t("Settings"), icon: SettingsGlyph, divider: true, run: () => { actions.counted?.("settings", "menu"); actions.openSettings(); } }]),
+    { id: "settings", label: t("Settings"), icon: SettingsGlyph, divider: true, run: () => { actions.counted?.("settings", "menu"); actions.openSettings(); } },
     ...fromMore("sign-out"),
   ];
   const modeAppItems: RowMenuItem[] = [...modeLeadItems, ...modeEndItems];

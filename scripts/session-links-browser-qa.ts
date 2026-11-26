@@ -79,7 +79,7 @@ async function visitorFlow(context: BrowserContext, url: string, target: Case, o
   assert.ok(!page.url().includes("/s/") && !page.url().includes(url.split("/s/")[1]!), `${target.name}: no token in the address`);
   // nothing of the PC around the session
   assert.equal(await page.locator(".machine-group").count(), 1, `${target.name}: one machine in the sidebar`);
-  for (const absent of [".sidebar-footer-settings", ".machine-manage", ".sidebar-account-pcs", ".inbox-rail-settings"]) {
+  for (const absent of [".machine-manage", ".sidebar-account-pcs"]) {
     assert.equal(await page.locator(absent).count(), 0, `${target.name}: no ${absent}`);
   }
   // the pane's terminal takes typing, which reaches the pane
@@ -98,14 +98,37 @@ async function visitorFlow(context: BrowserContext, url: string, target: Case, o
   await page.locator(".header-more-button").click();
   const items = await page.locator('.row-menu [role="menuitem"], .row-menu [role="menuitemcheckbox"], .row-sheet .row-sheet-item').allTextContents();
   assert.ok(items.length > 0, `${target.name}: the More menu opens`);
-  for (const item of items) assert.ok(!/^(Alerts|Settings|Add a PC|Private link)/.test(item.trim()), `${target.name}: More offers "${item.trim()}"`);
+  for (const item of items) assert.ok(!/^(Alerts|Add a PC|Private link)/.test(item.trim()), `${target.name}: More offers "${item.trim()}"`);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Control+Shift+K");
   const palette = page.getByRole("dialog").first();
   await palette.waitFor();
   const rows = await palette.locator("[role=option], .palette-row, li").allTextContents();
-  for (const row of rows) assert.ok(!/(^|\s)(Settings|Add PC|Enable notifications)/.test(row.trim()), `${target.name}: the palette offers "${row.trim()}"`);
+  for (const row of rows) assert.ok(!/(^|\s)(Add PC|Enable notifications|Devices and PCs|Agents|About|OpenAI API key)/.test(row.trim()), `${target.name}: the palette offers "${row.trim()}"`);
+  assert.ok(rows.some((row) => /(^|\s)Settings/.test(row.trim())), `${target.name}: the palette offers Settings`);
   await page.keyboard.press("Escape");
+  // Settings holds this browser's own look and input, none of the PC's settings, and keeps a change in this browser
+  await page.locator(".sidebar-footer-settings").click();
+  const settings = page.locator(".settings-dialog");
+  const tabs = (await settings.locator('[role="tab"]').allTextContents()).map((text) => text.trim());
+  assert.deepEqual(tabs, ["Appearance", "Chat", "Terminal", "Shortcuts"], `${target.name}: Settings offers ${tabs.join(", ")}`);
+  for (const id of ["appearance", "chat", "terminal", "shortcuts"]) {
+    await settings.locator(`[data-settings-page="${id}"]`).click();
+    await settings.locator("#settings-panel .settings-page-note", { hasText: "On a private link, these settings apply in this browser only." }).waitFor();
+  }
+  await settings.getByRole("searchbox", { name: "Search settings" }).fill("OpenAI API key");
+  await settings.locator("#settings-search-results").waitFor();
+  assert.equal(await settings.locator('[data-section="openai-key"]').count(), 0, `${target.name}: Settings shows the PC's OpenAI key`);
+  await settings.getByRole("searchbox", { name: "Search settings" }).fill("");
+  await settings.locator('[data-settings-page="appearance"]').click();
+  await settings.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: "Dark", exact: true }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
+  const again = await context.newPage();
+  await again.goto(origin);
+  await again.locator(".workspace-header", { hasText: target.workspace }).first().waitFor();
+  await again.locator(".sidebar-footer-settings").click();
+  await again.locator(".settings-dialog").getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: "Dark", exact: true, pressed: true }).waitFor();
+  await again.close();
   // let every background request settle before judging them
   await page.waitForLoadState("networkidle");
   // (c) nothing the server refused, in the whole visit
@@ -156,9 +179,10 @@ try {
     // (b, c) a fresh browser with the link and nothing else
     const visitorContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     // a named font would have the page ask the PC's fonts folder, which a link may not read
-    await visitorContext.addInitScript(() => { localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", uiFontFamily: "QA Link Font", chatFontFamily: "QA Link Font" })); });
+    // only on the first page: a later one must find what the visitor changed in Settings
+    await visitorContext.addInitScript(() => { if (localStorage.getItem("ovis:settings") === null) localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", uiFontFamily: "QA Link Font", chatFontFamily: "QA Link Font" })); });
     const { page, closed } = await visitorFlow(visitorContext, url, target, origin);
-    console.log(`${target.name}: visitor reached the session, typed into its pane, and asked nothing the server refused`);
+    console.log(`${target.name}: visitor reached the session, typed into its pane, kept a change in its own Settings, and asked nothing the server refused`);
     // (d) revoking ends the socket and refuses the next call
     const links = await (await ownerContext.request.get(`${origin}/api/session-links`)).json() as { id: string; machine_id: string }[];
     const mineLink = links.find((link) => link.machine_id === target.machineId)!;

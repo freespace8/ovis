@@ -91,7 +91,8 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { FILE_PANEL_DOCK_QUERY } from "../lib/filePanelWidth.ts";
 import { CrashProbe, RegionCrash } from "./AppCrash.tsx";
 import { RenderBoundary } from "./RenderBoundary.tsx";
-import { requestedSettingsPage, requestSettingsPage, type SettingsPageId } from "../lib/paletteSettings.ts";
+import { LINK_SETTINGS_PAGES, requestedSettingsPage, requestSettingsPage, type SettingsPageId } from "../lib/paletteSettings.ts";
+import { linkMachine } from "../lib/transport.ts";
 import { currentSettingsPage } from "../lib/deepLink.ts";
 import { HERDR_WINDOW_CHOICES, type HerdrWindowChoice } from "../lib/herdrWindow.ts";
 import { canReuseExternalLinkTab, ExternalLink } from "../lib/externalLink.ts";
@@ -904,7 +905,9 @@ function VoiceMore() {
   }, []);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  useEffect(() => { fetchVoiceStatus().then(setVoice, () => setVoice(null)); }, []);
+  // a private link's page has no say in the PC's OpenAI key, nor in the recognition that uses it
+  const link = linkMachine() !== null;
+  useEffect(() => { if (!link) fetchVoiceStatus().then(setVoice, () => setVoice(null)); }, [link]);
   const changeVoiceKey = async (api_key: string | null) => {
     setVoiceBusy(true);
     try {
@@ -924,11 +927,11 @@ function VoiceMore() {
           <SettingsRow icon={Languages} label={t("Dictation language")} description={t("The language the microphone listens for. Auto is the app's language, or the browser's when the app is not translated into it.")} htmlFor="settings-voice-language" wide>
             <DictationLanguageSelect />
           </SettingsRow>
-          <SettingsRow icon={AudioLines} label={t("Speech recognition")} description={t("What turns speech into text. Auto uses the OpenAI API key when one is saved and the browser's own recognition when none is; Browser and API key keep to the one chosen.")} condition={settings.voiceEngine === "server" && voice && !voice.configured ? <span className="voice-error">{t("Save an API key to use the mic")}</span> : undefined} wide>
+          {!link && <SettingsRow icon={AudioLines} label={t("Speech recognition")} description={t("What turns speech into text. Auto uses the OpenAI API key when one is saved and the browser's own recognition when none is; Browser and API key keep to the one chosen.")} condition={settings.voiceEngine === "server" && voice && !voice.configured ? <span className="voice-error">{t("Save an API key to use the mic")}</span> : undefined} wide>
             <Segmented label={t("Speech recognition")} value={settings.voiceEngine} onChange={(voiceEngine) => update({ voiceEngine })} options={VOICE_ENGINES.map((voiceEngine) => ({ value: voiceEngine, label: t(voiceEngine === "auto" ? "Auto" : voiceEngine === "browser" ? "Browser" : "API key") }))} />
-          </SettingsRow>
+          </SettingsRow>}
         </SettingsGroup>
-        {settings.voiceEngine !== "browser" && (
+        {!link && settings.voiceEngine !== "browser" && (
           <SettingsGroup section="tidy-dictation">
             <SettingsRow icon={WandSparkles} label={t("Tidy dictated text")} description={t("Drops filler words and fixes spacing in what you dictated, in the chat, the terminal's input line or both; code and paths stay as spoken. Where it is off, the text stays exactly as transcribed.")} wide>
               <Segmented label={t("Tidy dictated text")} value={settings.voicePolishChat ? (settings.voicePolishTerminal ? "both" : "chat") : settings.voicePolishTerminal ? "terminal" : "off"} onChange={(where) => update({ voicePolishChat: where === "chat" || where === "both", voicePolishTerminal: where === "terminal" || where === "both" })} options={[{ value: "off", label: t("Off") }, { value: "chat", label: t("Chat") }, { value: "terminal", label: t("Terminal") }, { value: "both", label: t("Both") }] as const} />
@@ -936,7 +939,7 @@ function VoiceMore() {
           </SettingsGroup>
         )}
       </>}
-      <SettingsGroup title={t("OpenAI API key")} section="openai-key">
+      {!link && <SettingsGroup title={t("OpenAI API key")} section="openai-key">
         <div className="settings-item">
           {voice && (
             <p className="settings-label voice-status">
@@ -968,7 +971,7 @@ function VoiceMore() {
               : t("Audio is sent to OpenAI with your key. Nothing is recorded until you press the mic.")}
           </p>
         </div>
-      </SettingsGroup>
+      </SettingsGroup>}
     </>
   );
 }
@@ -1774,12 +1777,15 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
   const t = useT();
   const narrow = useNarrow();
   const [restored] = useState(() => shownBy(settingsEntry(window.history.state)));
-  const linked = PAGES.find((candidate) => candidate.id === currentSettingsPage(linkPage))?.id ?? null;
+  // a private link's page sets only this browser's own look and input (LINK_SETTINGS_PAGES)
+  const link = linkMachine() !== null;
+  const pages = link ? PAGES.filter(({ id }) => LINK_SETTINGS_PAGES.has(id)) : PAGES;
+  const linked = pages.find((candidate) => candidate.id === currentSettingsPage(linkPage))?.id ?? null;
   // the request is read, not taken, so a remount in development finds it again
   const [asked] = useState(requestedSettingsPage);
   useEffect(() => requestSettingsPage(null), []);
   const [chosen, setChosen] = useState<SettingsPage | null>(section === "updates" ? "about" : asked?.page ?? (restored ? restored.page : linked));
-  const page = chosen ?? (narrow ? null : PAGES[0]!.id);
+  const page = chosen !== null && pages.some(({ id }) => id === chosen) ? chosen : narrow ? null : pages[0]!.id;
   const [keyBarOpen, setKeyBarOpen] = useState(section === "updates" ? false : restored?.keyBar ?? false);
   useEffect(() => { recordSettings(settingsLevels(narrow, page, keyBarOpen)); }, [narrow, page, keyBarOpen]);
   useEffect(() => { onPage?.(page); }, [onPage, page]);
@@ -1909,16 +1915,16 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
     try { const view = await fetchMemory(projectFolder); if (read === memoryReads.current) setMemory({ view, error: null }); }
     catch (error) { if (read === memoryReads.current) setMemory((now) => ({ view: now.view, error: error instanceof Error ? error.message : String(error) })); }
   }, [projectFolder]);
-  useEffect(() => { void loadMemory(); }, [loadMemory]);
+  useEffect(() => { if (!link) void loadMemory(); }, [loadMemory, link]);
   const memoryWaiting = waitingNotes(memory.view).length;
   const [pcSettings, setPcSettings] = useState<MachineSettings | null>(null);
   const [pcSettingsError, setPcSettingsError] = useState<string | null>(null);
   useEffect(() => {
-    if (page !== "devices" && page !== "about" && !searching) return;
+    if (link || (page !== "devices" && page !== "about" && !searching)) return;
     let live = true;
     machineRequest<MachineSettings>("/settings").then((settings) => { if (live) setPcSettings(settings); }, () => { if (live) setPcSettings(null); });
     return () => { live = false; };
-  }, [page, searching]);
+  }, [page, searching, link]);
   const updatePcSettings = async (patch: Partial<MachineSettings>) => {
     try { setPcSettings(await machineRequest<MachineSettings>("/settings", "PATCH", patch)); setPcSettingsError(null); }
     catch (e) { setPcSettingsError(e instanceof Error ? e.message : String(e)); }
@@ -1942,10 +1948,10 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
   }, [onClose, keyBarOpen, overPreview, query]);
 
   const onTabKey = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void => {
-    const to = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? index - 1 : event.key === "Home" ? 0 : event.key === "End" ? PAGES.length - 1 : null;
+    const to = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? index - 1 : event.key === "Home" ? 0 : event.key === "End" ? pages.length - 1 : null;
     if (to === null) return;
     event.preventDefault();
-    const next = PAGES[(to + PAGES.length) % PAGES.length]!.id;
+    const next = pages[(to + pages.length) % pages.length]!.id;
     tab(next)?.focus();
     if (!narrow) openFromSearch(next);
   };
@@ -1968,7 +1974,8 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
     }
   };
   const listShown = !narrow || (page === null && !keyBarOpen);
-  const focusable = page ?? PAGES[0]!.id;
+  const focusable = page ?? pages[0]!.id;
+  const note = page === null ? null : link ? t("On a private link, these settings apply in this browser only.") : pageNote(t, page);
 
   return (
     <div className={overPreview ? "modal-scrim settings-over-preview" : "modal-scrim"} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -1998,7 +2005,7 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
               />
             </div>
             <div ref={tabsRef} className="settings-tabs" role="tablist" aria-orientation="vertical" hidden={searching && narrow}>
-              {PAGES.map(({ id, icon: Icon }, index) => (
+              {pages.map(({ id, icon: Icon }, index) => (
                 <button key={id} type="button" role="tab" className="settings-tab" data-settings-page={id} aria-selected={!searching && page === id} aria-controls={!searching && page === id ? "settings-panel" : undefined} tabIndex={focusable === id ? 0 : -1} onClick={() => openFromSearch(id)} onKeyDown={(event) => onTabKey(event, index)}>
                   <Icon aria-hidden="true" />
                   <span>{label(id)}</span>
@@ -2014,7 +2021,7 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
             {saveError !== null && <SaveFailure error={saveError} paused={savePaused} retrying={saveRetrying} onRetry={onRetrySave} />}
             <p className="settings-search-empty" role="status">{t("No settings match.")}</p>
             <SettingsQuery.Provider value={words}>
-              {PAGES.map(({ id }) => (
+              {pages.map(({ id }) => (
                 <section key={id} className="settings-search-page" aria-label={label(id)}>
                   <button type="button" className="settings-search-page-title" aria-label={t("Open {page}", { page: label(id) })} title={t("Open {page}", { page: label(id) })}
                   onClick={(event) => openFromSearch(id, matchedGroups(event.currentTarget.closest(".settings-search-page"), words))}>
@@ -2026,7 +2033,7 @@ function OpenSettingsDialog({ section = null, linkPage = null, linkSection = nul
               ))}
             </SettingsQuery.Provider>
           </div>
-        ) : page !== null && <div key={page} ref={settingsBodyRef} id="settings-panel" className="modal-body settings-body" role="tabpanel" aria-label={label(page)} hidden={keyBarOpen}>{saveError !== null && <SaveFailure error={saveError} paused={savePaused} retrying={saveRetrying} onRetry={onRetrySave} />}{pageNote(t, page) !== null && <p className="settings-page-note">{pageNote(t, page)}</p>}{body(page)}</div>}
+        ) : page !== null && <div key={page} ref={settingsBodyRef} id="settings-panel" className="modal-body settings-body" role="tabpanel" aria-label={label(page)} hidden={keyBarOpen}>{saveError !== null && <SaveFailure error={saveError} paused={savePaused} retrying={saveRetrying} onRetry={onRetrySave} />}{note !== null && <p className="settings-page-note">{note}</p>}{body(page)}</div>}
         {keyBarOpen && <div className="modal-body settings-key-bar-body"><KeyBarSettings /></div>}
       </section>
     </div>
