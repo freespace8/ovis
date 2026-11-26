@@ -20,14 +20,17 @@ import { useOffline } from "../lib/useOffline.ts";
 import { AccountJoinRequests } from "./AccountJoinRequests.tsx";
 import { AccountSignIn } from "./AccountPcs.tsx";
 import { AddPcSheet } from "./AddPcSheet.tsx";
-import { AccountlessRelayPanel, AccountRelayPanel, AddPcTabs, type CheckedPc, type CodeWays, type ConnectWay, MyPcs, OfflineLine, SHELL, SignedOutRelayPanel, usePhoneSaved } from "./ConnectStart.tsx";
+import { AccountlessRelayPanel, AccountRelayPanel, AddPcTabs, type CheckedPc, type CodeWays, type ConnectWay, MyPcs, OfflineLine, savedWayTag, SHELL, SignedOutRelayPanel, usePhoneSaved } from "./ConnectStart.tsx";
 import { codeFailureText, type TypedCodeFailure } from "./codeFailureText.ts";
 import { KeyId } from "./KeyId.tsx";
+import { ListAlarmLine } from "./ListAlarmNotice.tsx";
+import { ListWaitingNotice } from "./ListChangeNotice.tsx";
+import { ListMoveNotices } from "./ListMoveNotice.tsx";
 import { NoPcOnline } from "./NoPcOnline.tsx";
 import { EnrollmentStatus } from "./EnrollmentStatus.tsx";
 import { ADD_PC_FROM_KEY } from "./MachineSidebar.tsx";
 import { NewPcNotices } from "./NewPcNotices.tsx";
-import { canScanQr, OpenState, scanQr, useAddressOpen, useConnectScreen } from "./RelayAddPc.tsx";
+import { canScanQr, OpenState, OtherWayButton, scanQr, useAddressOpen, useConnectScreen } from "./RelayAddPc.tsx";
 import { INSTALLER_COMMAND, PcApprovalWait, type PlainReason, PLUGIN_COMMANDS, RelayShellCardContent, TypedDigits } from "./RelayShellScreens.tsx";
 import { RelayStepFrame, type RelayStepBack } from "./RelayStepFrame.tsx";
 import { SheepMascot } from "./SheepMascot.tsx";
@@ -308,7 +311,7 @@ export function RelayShell(props: RelayShellProps) {
   const frontView = (top: ReactNode, accountMenu = false): ReactNode => (
     <div className={desk ? "connect-panes connect-desk" : "connect-panes"}>
       {listed && (
-        <MyPcs key="list" hidden={addOver} devices={savedPcs} accountPcs={account?.kind === "signed-in" ? account.pcs : null} knownPcs={account?.kind === "signed-in" ? account.known : undefined} checked={checked} phone={phone} onForget={props.onForgetSaved} wide={desk} focusAdd={listFocus}
+        <MyPcs key="list" hidden={addOver} devices={savedPcs} accountPcs={account?.kind === "signed-in" ? account.pcs : null} knownPcs={account?.kind === "signed-in" ? account.known : undefined} accountUnread={account?.kind === "signed-in" && account.error !== null} checked={checked} phone={phone} onForget={props.onForgetSaved} wide={desk} focusAdd={listFocus}
           inUse={addOpen && addFrom !== null ? serverIdOfPath(addFrom) : null} onBack={addOpen ? () => { setAddOpen(false); leaveAddEntry(addFrom); } : undefined}
           onAdd={desk ? undefined : () => { setAddView(true); setAddFocus((count) => count + 1); }} accountMenu={accountMenu} top={top}
           empty={account?.kind === "signed-in" && account.pcs !== null ? <p className="relay-shell-copy">{t("Sign in with the same account on the PC where Ovis runs")}</p> : undefined} />
@@ -326,6 +329,14 @@ export function RelayShell(props: RelayShellProps) {
   // yet, the same page, the rows saying Off or the list saying to sign in on a PC); a code typed from Add PC's relay tab
   // goes on in the pairing dialog over it
   if (account?.kind === "signed-in") {
+    // this device cannot read its account's list: the PCs below are then the account service's word, each marked, and none opens by itself
+    const listUnread = account.list !== undefined && (
+      <p className="account-error relay-add-directory-error" role="status" data-list-unread={account.list}>
+        {account.list === "newer" ? t("This device cannot read your account's list. Update the app.")
+          : account.list === "unread" ? t("This device has not read your account's list yet. It keeps trying.")
+          : t("This device cannot read your account's list. Sign out and in again on this device, then allow it from another device.")}
+      </p>
+    );
     const directoryError = account.error !== null && !offline && (
       <p className="account-error relay-add-directory-error" role="alert">{account.error}{onRefreshAccount && <> <button type="button" className="account-link" onClick={() => { void onRefreshAccount(); }}>{t("Try again")}</button></>}</p>
     );
@@ -333,7 +344,12 @@ export function RelayShell(props: RelayShellProps) {
       <main className={frontClass(myPcsShown)} data-relay-state={stateName} data-account-state={account.kind}>
         {/* one wrapper whether the dialog is open or not: swapping it in would remount the page, losing the control that opened it before its focus trap records it */}
         <div className="relay-shell account-centered relay-shell-signin" inert={addingPc || undefined}>
-          {frontView(<>{noneOnline}<NewPcNotices /><AccountJoinRequests /><UnconfirmedPcNotices tellConfirmed={false} onSignInAgain={onSignIn} />{directoryError}</>, true)}
+          {frontView(<>{noneOnline}<NewPcNotices /><AccountJoinRequests /><UnconfirmedPcNotices tellConfirmed={false} onSignInAgain={onSignIn} /><ListAlarmLine />{listUnread}{directoryError}</>, true)}
+          {/* a change here (a Remove) that was refused because an earlier one still waits: that one's card, to try it again or cancel it */}
+          <ListWaitingNotice />
+          {/* the one-time notice of the move of an account that was in use onto its list, or why this device did not join it */}
+          <ListMoveNotices />
+          {!myPcsShown && listUnread}
           {!myPcsShown && directoryError}
         </div>
         {addingPc && (
@@ -365,12 +381,13 @@ export function RelayShell(props: RelayShellProps) {
     : state.kind === "failed" ? state.server_id === sheetJoin.server_id && state.failure !== "identity-changed"
     : state.kind === "connecting" || state.kind === "compare" || state.kind === "ready");
   if (continued) {
-    // #16: the join a sign-in's launch asked by itself waits on one plain screen, and ends on one too (declined, removed,
-    // the PC off: Ask again or Check again asks once more); any other failure, or a number to type here, keeps the sheet
+    // #16: the join a sign-in's launch asked by itself waits on one plain screen, and ends on one too (declined, refused,
+    // removed, the PC off: Ask again or Check again asks once more); any other failure, or a number to type here, keeps the sheet
     const launched: { readonly reason: PlainReason; readonly digits?: string; readonly ask?: () => void; readonly check?: () => void } | null = props.launchJoin !== true ? null
       : state.kind === "confirm" || state.kind === "connecting" ? { reason: "allow" }
       : state.kind === "compare" && state.typed !== true ? { reason: state.approveOn === undefined ? "type" : "allow", digits: state.digits }
-      : state.kind === "failed" && (state.failure === "pair-declined" || state.failure === "pair-unavailable") ? { reason: "declined", ask: onRetry }
+      : state.kind === "failed" && state.failure === "pair-declined" ? { reason: "declined", ask: onRetry }
+      : state.kind === "failed" && state.failure === "pair-unavailable" ? { reason: "refused", ask: onRetry }
       : state.kind === "failed" && state.failure === "pair-unanswered" ? { reason: "unanswered", ask: onRetry }
       : state.kind === "failed" && state.failure === "revoked" ? { reason: "removed", ask: onRetry }
       : state.kind === "failed" && state.failure === "pc-offline" ? { reason: "off", check: onRetry }
@@ -400,7 +417,14 @@ export function RelayShell(props: RelayShellProps) {
       </main>
     );
   }
-  const content = <RelayShellCardContent props={props} />;
+  // a saved PC whose relay open failed or was refused: the way the phone app also saved it by (its own page told the
+  // app its relay ID), offered by name, one button; never for a key that is not the PC's, nor a pairing's sign-in
+  const otherSaved = state.kind === "failed" && state.pairing !== true && state.server_id !== undefined && state.failure !== "identity-changed" && state.failure !== "sign-in-first"
+    ? phone.pcs.find((saved) => saved.serverId === state.server_id) ?? null : null;
+  const otherWay = otherSaved && (
+    <OtherWayButton way={savedWayTag(t, otherSaved)} host={otherSaved.host} onClick={() => { scan.setError(null); scan.take(new URL(otherSaved.origin), { askTailscale: otherSaved.way === "tailscale" }); }} />
+  );
+  const content = <RelayShellCardContent props={props} other={otherWay} />;
   const step = plain ? undefined : pairingStep(state);
   if (step !== undefined) {
     // before this phone's press the comparison can still go back; after it, the pairing waits on the PC and only its own small Cancel ends it
@@ -420,6 +444,7 @@ export function RelayShell(props: RelayShellProps) {
         {plain ? <SheepMascot screen="header" size={80} /> : <img src="/icons/icon-192.png?v=sheep1" alt="" width="44" height="44" className="relay-shell-mark" />}
         {noneOnline}
         {content}
+        {otherSaved && <OpenState open={scan} />}
       </div>
     </main>
   );

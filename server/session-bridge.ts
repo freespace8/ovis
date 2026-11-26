@@ -24,7 +24,7 @@ export function otherSessions(found: readonly FoundHerdrSession[], own: string):
  * process of its own, pinned to that session's socket, on loopback for this one. Its state lives under
  * `<stateDir>/sessions/<id>`; it ends with this server (it holds the stdin this one keeps open).
  */
-export async function startSessionBridge(id: string, socket: string, stateDir: string): Promise<MachineBridge> {
+export async function startSessionBridge(id: string, socket: string, stateDir: string, signal?: AbortSignal): Promise<MachineBridge> {
   const dir = join(stateDir, "sessions", id);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const ready = Promise.withResolvers<{ port: number; token: string }>();
@@ -37,16 +37,22 @@ export async function startSessionBridge(id: string, socket: string, stateDir: s
   const stop = () => {
     try { child.stdin.end(); } catch {}
     child.kill();
+    return child.exited.then(() => undefined);
   };
   void child.exited.then((code) => ready.reject(new Error(`The server for ${id} stopped before it answered (exit ${code})`)));
   const timer = setTimeout(() => ready.reject(new Error(`The server for ${id} did not start within ${READY_MS / 1000}s`)), READY_MS);
+  // this server is stopping: a child that has not answered yet is not waited for until READY_MS
+  const abort = () => ready.reject(new Error(`The server for ${id} was stopped before it answered`));
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
   try {
     const { port, token } = await ready.promise;
     return { endpoint: { url: `http://127.0.0.1:${port}`, token }, exited: child.exited, stop };
   } catch (error) {
-    stop();
+    await stop();
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
   }
 }

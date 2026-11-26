@@ -14,6 +14,13 @@ import com.getcapacitor.annotation.PermissionCallback;
 @CapacitorPlugin(name = "HerdrShell", permissions = { @Permission(alias = "camera", strings = { Manifest.permission.CAMERA }) })
 public class HerdrShellPlugin extends Plugin {
     private final PCStore.Openings openings = new PCStore.Openings();
+
+    /** Capacitor loads its plugins before the WebView's first page: what that page must have from its start is added here. */
+    @Override
+    public void load() {
+        if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).beforeFirstPage(getBridge());
+    }
+
     @PluginMethod
     public void getState(PluginCall call) {
         JSObject state = new JSObject();
@@ -38,7 +45,51 @@ public class HerdrShellPlugin extends Plugin {
         state.put("failure", PCStore.failure == null ? "" : PCStore.failure);
         state.put("kind", PCStore.failureKind == null ? "" : PCStore.failureKind);
         state.put("command", PCStore.failureCommand == null ? "" : PCStore.failureCommand);
+        // the relay ID each saved PC's own page said it has, for My PCs to list a PC saved by several ways once: only to
+        // the app's own pages, never to a PC's page, which has this bridge too
+        org.json.JSONObject ids = Home.shownIds(loadedUrl(), showingConnectScreen(), BuildConfig.APP_ORIGIN, PCStore.ids(getContext()));
+        if (ids != null) state.put("ids", ids);
         call.resolve(state);
+    }
+
+    /** The address of the page loaded now, read on the UI thread, or null when it does not answer in time. */
+    private String loadedUrl() {
+        if (getActivity() == null) return null;
+        java.util.concurrent.CompletableFuture<String> loaded = new java.util.concurrent.CompletableFuture<>();
+        getActivity().runOnUiThread(() -> loaded.complete(getBridge().getWebView().getUrl()));
+        try {
+            return loaded.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception unanswered) {
+            return null;
+        }
+    }
+
+    /**
+     * The application id this build was made as. The client turns the waits of a move onto the account's signed list
+     * down only in the QA twin (sh.ovis.app.previewqa; src/lib/account/listMigrate.ts migrationScale), never elsewhere.
+     */
+    @PluginMethod
+    public void appId(PluginCall call) {
+        JSObject answer = new JSObject();
+        answer.put("id", getContext().getPackageName());
+        call.resolve(answer);
+    }
+
+    /**
+     * A PC's own page says which PC it is: `server_id`, its relay ID as its own /api/health gave it to that page, and
+     * `name`. Kept only for the saved PC the app shows when the page loaded now is on that PC's own address
+     * (Home.identifiedKey), so a page speaks for its own PC alone, never for another saved one; My PCs then lists that PC
+     * once with the relay row of the same ID.
+     */
+    @PluginMethod
+    public void identify(PluginCall call) {
+        String key = Home.identifiedKey(loadedUrl(), PCStore.current(getContext()), BuildConfig.APP_ORIGIN);
+        if (key == null) {
+            call.reject("Only a saved PC's own page says which PC it is.");
+            return;
+        }
+        PCStore.identify(getContext(), key, call.getString("server_id"), call.getString("name"));
+        call.resolve();
     }
 
     /** url: an http or https address, the first page (a pairing link's code or a relay pairing offer's fragment included). */
@@ -111,7 +162,7 @@ public class HerdrShellPlugin extends Plugin {
                     call.reject("Cancelled", "cancelled");
                     return;
                 }
-                if (name != null && !name.isEmpty()) PCStore.setName(getContext(), key, name.length() > 64 ? name.substring(0, 64) : name);
+                if (name != null && !name.isEmpty()) PCStore.setName(getContext(), key, Home.capped(name, 64));
                 PCStore.open(getContext(), key, text);
                 PCStore.fail(null, null);
                 PCStore.redirects = 0;
@@ -233,6 +284,22 @@ public class HerdrShellPlugin extends Plugin {
             return;
         }
         requestPermissionForAlias("camera", call, "cameraAnswered");
+    }
+
+    /**
+     * The preview build's own update (PreviewUpdater) for Settings → About (src/lib/previewAppUpdate.ts): "state"
+     * answers at once, "check" once the check and any download are over, "install" hands the downloaded APK to the
+     * system installer. Its phase is "off" in every build but the preview.
+     */
+    @PluginMethod
+    public void previewUpdate(PluginCall call) {
+        String action = call.getString("action", "state");
+        if ("check".equals(action)) {
+            PreviewUpdater.check(getActivity(), call::resolve);
+            return;
+        }
+        if ("install".equals(action)) getActivity().runOnUiThread(() -> PreviewUpdater.install(getActivity()));
+        call.resolve(PreviewUpdater.state());
     }
 
     @PermissionCallback

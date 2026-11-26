@@ -59,6 +59,7 @@ import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
 import { LOCAL_MACHINE, pairedPc, paneStorageId, type Machine } from "../shared/machines.ts";
 import { SessionLinksDialog } from "./components/SessionLinksDialog.tsx";
 import { inNativeApp } from "./lib/nativeApp.ts";
+import { useTellAppWhichPc } from "./lib/useTellAppWhichPc.ts";
 import { serverIdOfPath, shellMode } from "./lib/shellMode.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
 import { takeAuthTokenFromUrl } from "./lib/authLink.ts";
@@ -103,6 +104,7 @@ import { useOwnWindowPrompts } from "./lib/useOwnWindowPrompts.ts";
 import { pcHeld } from "./lib/relay/newPcHere.ts";
 import { OwnJoinCard } from "./components/OwnJoins.tsx";
 import { AccountApprovals } from "./components/AccountApprovals.tsx";
+import { ListMoveNotices } from "./components/ListMoveNotice.tsx";
 import { TelemetryNotice } from "./components/TelemetryControls.tsx";
 import { FilesDialog } from "./components/FilesDialog.tsx";
 import { folderQueryFor } from "./lib/paletteFolders.ts";
@@ -120,6 +122,7 @@ import { relayNoticeOf, useRelayNotice } from "./lib/relayNotice.ts";
 import { useAccountSignedIn } from "./lib/account/useAccountSignedIn.ts";
 import { usePaneObserving } from "./lib/paneObserving.ts";
 import { OpenFileContext } from "./lib/filePaths.ts";
+import { PaneOpenFile } from "./components/PaneOpenFile.tsx";
 import { useAccessState, useLockedRef, usePairFromAddress } from "./lib/useAccess.ts";
 import { useLocalHealth } from "./lib/useLocalHealth.ts";
 import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError, useRosterEvents, useRosterLoader, useRosterState } from "./lib/useMachineRoster.ts";
@@ -265,6 +268,7 @@ export function App() {
   // a PC this one only watches there (Machine.view_only) is drawn as a watching device draws every PC
   const viewOnly = (machineId: string): boolean => auth?.role === "watch" || machines.find((machine) => machine.id === machineId)?.view_only === true;
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
+  useTellAppWhichPc(health === null ? undefined : health.web_ui?.server_id ?? "", machines.find((machine) => machine.id === LOCAL_MACHINE)?.name);
   const exposure = health?.lan_exposure ?? health?.direct_exposure;
   const exposureDirect = !health?.lan_exposure || health.lan_exposure.direct === true;
   const noticeScope = serverIdOfPath(window.location.pathname) ?? "";
@@ -1209,10 +1213,12 @@ export function App() {
         <PushHealthNotice onRepair={repairNotifications} onOpen={() => { setSettingsLinkPage("alerts"); setSettingsOpen(true); }} />
         <InstallHint />
         {setupGuide.guide !== null && setupGuide.paused && <SetupGuideResume onResume={setupGuide.resume} />}
-        {prompts.length > 0 && <RelayPairingPrompt pairings={prompts} />}
+        {prompts.length > 0 && <RelayPairingPrompt pairings={prompts} onDecided={rereadOwnJoins} />}
         {/* an account join a member could approve too: this PC's own window asks for the number itself (OwnJoinCard) */}
         {ownWindow && locked === false && <OwnJoinCard joins={ownJoins} onDecided={rereadOwnJoins} />}
-        {remotePairings.length > 0 && <AccountApprovals pairings={remotePairings} />}
+        {/* always there: it keeps what an approval left to say after its request is gone from this PC */}
+        <AccountApprovals pairings={remotePairings} />
+        <ListMoveNotices />
         {pairedNotices.length > 0 && <DevicePairedNotice events={pairedNotices} onDismiss={dismissPairedNotice} onOpen={(event) => { dismissPairedNotice(event); setSettingsLinkPage("devices"); setSettingsOpen(true); }} />}
         {deviceNotices}
         {health !== null && <NewPcNotices enabled={machineSessions.peek("local")?.socket?.accountOpensAll() === true} ownWindowOf={ownWindowHere(health.auth) ? health.web_ui?.server_id : undefined} signIn={accountSignedIn ?? undefined} />}
@@ -1334,7 +1340,7 @@ export function App() {
                     tabsInHeader={tabsInHeader || threadDrawn} solo={threadDrawn}
                     renameRequest={active && pane && renameRequest?.machineId === machineId && renameRequest.paneId === pane.pane_id ? renameRequest : null}
                     closeTabRequest={active && pane && closeTabRequest?.machineId === machineId && closeTabRequest.paneId === pane.pane_id ? closeTabRequest : null}
-                    renderPane={(item, itemActive, herdrSplit) => <OpenFileContext.Provider value={item ? (path) => openFile({ path, paneId: item.pane_id, machineId }) : null}>
+                    renderPane={(item, itemActive, herdrSplit) => <PaneOpenFile paneId={item?.pane_id ?? null} machineId={machineId} open={openFile}>
                       <PaneTerminal
                         presentationKey={paneContentKey(machine, item, item ? lensOf(item) : slotView)}
                         deviceWatching={viewOnly(machineId)}
@@ -1350,6 +1356,8 @@ export function App() {
                         agent={item?.agent ?? null}
                         agentStatus={item?.agent_status}
                         agentSession={item ? paneSessionKey(item) : null}
+                        acpChild={item?.acp_child === true}
+                        acpHold={item?.acp_hold}
                         backgroundTasks={item?.background_tasks ?? 0}
                         plan={machine?.state === "connected" ? (item as HerdrPane | undefined)?.plan ?? null : null}
                         backgroundWait={item?.background_wait === true}
@@ -1377,7 +1385,7 @@ export function App() {
                         onConnectionChange={active && itemActive ? (next, before) => { setConnected(next); setConnectedBefore(before); setReportedBy(`${slot}:${machineId}`); if (next) setOutputStopped(false); } : undefined}
                         onServerMessage={active && itemActive ? handleServerMessage : undefined}
                       />
-                    </OpenFileContext.Provider>} />
+                    </PaneOpenFile>} />
                   </div>
                 </main>
                 </RenderBoundary>
@@ -1388,7 +1396,7 @@ export function App() {
           {listScreen && modeList(false)}
           {inboxWide && inbox.shown && <InboxUnchosen />}
           {dividers.length > 0 && !inMode && <SplitDividers dividers={dividers} areaRef={paneAreaRef} onResize={resizeDivider} />}
-          <SplitDropPreview visible={!inMode && splitDragOn && (paneDragging || tabDrag !== null)} grid={gridPreview} />
+          <SplitDropPreview visible={!inMode && splitDragOn && (paneDragging || (tabDrag !== null && !tabDrag.workspaceTarget))} grid={gridPreview} />
         </div>}
         {statusBarShown && selectedPane && crumb && <StatusBar machineId={selectedMachineId} workspaceId={selectedPane.workspace_id}
           machine={crumb.machine} place={crumb.folder === null ? crumb.workspace : `${crumb.workspace} › ${crumb.folder}`} path={crumb.path}
@@ -1469,7 +1477,7 @@ export function App() {
         setFilesOpen(false);
         selectTargetRef.current(machineId, paneId);
       }} />
-      <SettingsDialog opensAll={() => ownWindowHere(health?.auth) && machineSessions.peek("local")?.socket?.accountOpensAll() === true} withdrawn={() => machineSessions.peek("local")?.socket?.accountReleaseWithdrawn() === true} machines={machines} auth={auth} picturesByDefault={picturesByDefault} herdrVersion={shownHealth?.herdr?.version ?? null} herdrRuntime={shownHealth?.herdr ? shownHealth.herdr.runtime ?? "herdr" : null} herdrCore={shownHealth?.herdr_core ?? null} herdrRuntimeFacts={shownHealth?.herdr_runtime ?? null} bootId={shownHealth?.web_ui?.boot_id ?? null} onServerRestarted={() => { void readLocalHealth(); void readBridgeHealth(); void load(); }} security={security} open={settingsOpen} section={settingsSection} linkPage={settingsLinkPage} linkSection={settingsLinkSection} onPage={onSettingsPage} onClose={closeSettings} onUsageLogin={(paneId) => { closeSettings(); selectTarget("local", paneId, "terminal"); void load(); }} onOpenPane={(machineId, paneId) => { closeSettings(); selectTarget(machineId, paneId, "terminal"); void load(); }} actions={actions} updates={updates} onEnableNotifications={enableNotifications} saveError={settingsSaveError} savePaused={settingsSavePaused} saveRetrying={settingsSaveRetrying} onRetrySave={retrySettingsSave} overPreview={(viewing !== null && !fileDocked) || diffViewing !== null || (webPage !== null && !filePanelAvailable)} />
+      <SettingsDialog opensAll={() => ownWindowHere(health?.auth) && machineSessions.peek("local")?.socket?.accountOpensAll() === true} withdrawn={() => machineSessions.peek("local")?.socket?.accountReleaseWithdrawn() === true} machines={machines} auth={auth} picturesByDefault={picturesByDefault} herdrVersion={shownHealth?.herdr?.version ?? null} herdrRuntime={shownHealth?.herdr ? shownHealth.herdr.runtime ?? "herdr" : null} herdrCore={shownHealth?.herdr_core ?? null} herdrRuntimeFacts={shownHealth?.herdr_runtime ?? null} bootId={shownHealth?.web_ui?.boot_id ?? null} onServerRestarted={() => { void readLocalHealth(); void readBridgeHealth(); void load(); }} security={security} open={settingsOpen} section={settingsSection} linkPage={settingsLinkPage} linkSection={settingsLinkSection} onPage={onSettingsPage} onClose={closeSettings} onUsageLogin={(paneId) => { closeSettings(); selectTarget("local", paneId, "terminal"); void load(); }} onOpenPane={(machineId, paneId) => { closeSettings(); selectTarget(machineId, paneId, "terminal"); void load(); }} actions={actions} updates={updates} onEnableNotifications={enableNotifications} saveError={settingsSaveError} savePaused={settingsSavePaused} saveRetrying={settingsSaveRetrying} onRetrySave={retrySettingsSave} overPreview={(viewing !== null && !fileDocked) || diffViewing !== null || (webPage !== null && !filePanelAvailable)} projectFolder={selectedMachineId === "local" ? selectedPane?.cwd ?? null : null} />
       {filesOpen && !filesDocked && filesDialog(false)}
       {diffViewing !== null && <MachineContext.Provider value={diffViewing.machineId}>
         <RepoDiffViewer key={`${diffViewing.scope}:${diffViewing.path}`} target={diffViewing} onClose={closeDiff} onOpenFile={async (path) => {

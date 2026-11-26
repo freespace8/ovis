@@ -1,6 +1,7 @@
 import { expect, it } from "bun:test";
 import { FakeHcCore } from "../../server/herdr-core/core.fake.ts";
 import { startLoop } from "../loop.ts";
+import { STRINGS } from "../strings.ts";
 import { demo } from "../testing/fixtures/demo.ts";
 import { HeadlessHost } from "../testing/headless-host.ts";
 import { ManualClock } from "../testing/run.ts";
@@ -36,12 +37,10 @@ it.each(["joined", "split", "before first paint", "shortcut joined", "shortcut s
     let trigger = "~R";
     if (!shortcut) {
       host.feed("~\r");
-      const menu = loop.model().overlays.at(-1);
-      if (menu?.kind !== "menu") throw new Error("menu did not open");
-      const reload = menu.entries.find((entry) => entry.kind === "action" && entry.action === "reload_config");
-      if (!reload?.label) throw new Error("Reload has no menu label");
-      trigger = reload.label;
-      if (ordering !== "before first paint") await until(() => loop.screen()?.text.join("").includes("+ Menu ") === true);
+      if (loop.model().overlays.at(-1)?.kind !== "menu") throw new Error("menu did not open");
+      // down twice from the menu's first entry is reload config; Enter chooses it
+      trigger = "\x1b[B\x1b[B\r";
+      if (ordering !== "before first paint") await until(() => loop.screen()?.text.join("").includes(STRINGS.menuEntries.reload_config) === true);
     }
     const tail = shortcut ? "~q" : "!rz";
     if (ordering.endsWith("split")) {
@@ -52,9 +51,10 @@ it.each(["joined", "split", "before first paint", "shortcut joined", "shortcut s
     expect(loop.report().actions).not.toContain("quit");
     expect({
       actions: loop.report().actions.filter((action) => action === "reload_keys" || action.startsWith("run:")),
+      pane: loop.model().focus.panes["t-main"],
       bytes: ["t1", "t2"].map((id) => core.program(id).receivedHex()),
-    }).toEqual(shortcut ? { actions: ["reload_keys"], bytes: ["7e71", ""] }
-      : { actions: ["reload_keys", "run:focus_pane_right"], bytes: ["", "7a"] });
+    }).toEqual(shortcut ? { actions: ["reload_keys"], pane: "t1", bytes: ["7e71", ""] }
+      : { actions: ["reload_keys"], pane: "t2", bytes: ["", "7a"] });
     expect(loop.report().mode.overlays).toEqual([]);
     expect(reads).toBe(1);
   } finally {

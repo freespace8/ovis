@@ -7,13 +7,14 @@
  */
 import { type HerdrAction, type HerdrChord, type HerdrKeptBinding, type HerdrKeyRefusal, type HerdrNavigateKey, parseHerdrBinding, resolveAllHerdrKeys } from "../../shared/herdr-keys.ts";
 import { decodeControl, decodeCsi, decodeSs3, type InputEvent, typedKey } from "../input/decode.ts";
+import { type CopyAction, COPY_KEYS } from "./copy-keys.ts";
 
 export type Mode = "terminal" | "navigate" | "resize" | "copy";
 
 /** Actions only the screen's modes and its lock know. */
 /** Navigate mode's moves (herdr has no key for them): the workspace pointed at one place up or down, the focused pane into it. */
 export type MoveAction = "navigate_move_up" | "navigate_move_down" | "navigate_move_pane";
-export type LocalAction = "lock" | "menu" | "navigate_focus" | "navigate_cancel" | "navigate_index" | "navigate_cycle_next" | "navigate_cycle_previous" | "resize_leave" | "copy_leave" | MoveAction;
+export type LocalAction = "lock" | "menu" | "navigate_focus" | "navigate_cancel" | "navigate_index" | "navigate_cycle_next" | "navigate_cycle_previous" | "resize_leave" | CopyAction | MoveAction;
 export type KeyAction = HerdrAction | HerdrNavigateKey | LocalAction;
 
 export interface KeyRow {
@@ -107,6 +108,9 @@ const LOCK_KEY = "ctrl+alt+g";
  */
 const MENU_KEY = "prefix+enter";
 
+/** The screen's own keys after the prefix, claimed before the config's bindings. */
+const FIXED_AFTER_PREFIX = [{ action: "menu", key: MENU_KEY }] as const;
+
 /**
  * The prefix when none of the config's can be typed: herdr's default ctrl+b, then the next one no binding of the config
  * holds. Each is a single control byte every terminal sends. The later ones mean something to programs (ctrl+a is
@@ -118,6 +122,12 @@ const FALLBACK_PREFIXES = ["ctrl+b", "ctrl+a", "ctrl+]", "ctrl+\\"] as const;
 
 /** detach when none of its keys can fire: herdr's default, then the next one no binding after the prefix and no prefix holds. */
 const FALLBACK_DETACH = ["prefix+q", "prefix+ctrl+q", "prefix+alt+q"] as const;
+
+/**
+ * herdr's tab and workspace moves that repeat in navigate mode without the prefix: the keys that run them after the prefix
+ * (or directly) run them there too, so a user steps through tabs as they step through panes.
+ */
+const NAVIGATE_REPEATS = ["next_tab", "previous_tab", "next_workspace", "previous_workspace"] as const satisfies readonly HerdrAction[];
 
 /** The keys that always leave an armed prefix (and navigate mode). */
 const CANCEL_KEYS = ["esc", "ctrl+["] as const;
@@ -141,7 +151,6 @@ const FIXED: readonly { readonly action: KeyAction; readonly mode: Exclude<Mode,
   { action: "resize_pane_up", mode: "resize", keys: ["k", "up"] },
   { action: "resize_pane_right", mode: "resize", keys: ["l", "right"] },
   { action: "resize_leave", mode: "resize", keys: ["esc", "enter"] },
-  { action: "copy_leave", mode: "copy", keys: ["esc", "q"] },
 ];
 
 export function chordId(chord: HerdrChord): string {
@@ -277,12 +286,14 @@ export function buildKeymap(keys: unknown): Keymap {
   const afterPrefix: Record<string, Bound> = {};
   const direct: Record<string, Bound> = {};
   const rows: KeyRow[] = [];
-  // the menu's key, claimed first (no prefix at all: nothing after it fires, and the menu opens by a click)
-  const menuChord = parseHerdrBinding(MENU_KEY)!.chord;
-  const menuId = matchId(menuChord);
-  const menuHeld = prefixes.length > 0 && !Object.hasOwn(prefixIds, menuId);
-  if (menuHeld) afterPrefix[menuId] = { action: "menu", index: null };
-  const afterFixed: ReadonlySet<string> = menuHeld ? new Set([menuId]) : NOTHING_FIXED;
+  // the screen's own keys after the prefix, claimed first (no prefix at all: nothing after it fires, and the menu opens by a click)
+  const own = FIXED_AFTER_PREFIX.map(({ action, key }) => {
+    const chord = parseHerdrBinding(key)!.chord;
+    const id = matchId(chord);
+    return { action, key, chord, id, held: prefixes.length > 0 && !Object.hasOwn(prefixIds, id) };
+  });
+  for (const { action, id, held: claimed } of own) if (claimed) afterPrefix[id] = { action, index: null };
+  const afterFixed: ReadonlySet<string> = new Set(own.filter(({ held: claimed }) => claimed).map(({ id }) => id));
   /** What holds the key `chord` arrives as in `lookup` (in Terminal mode a prefix holds its own key), or null. */
   const holderIn = (lookup: Record<string, Bound>, chord: HerdrChord): string | null => {
     const id = matchId(chord);
@@ -342,11 +353,14 @@ export function buildKeymap(keys: unknown): Keymap {
   if (lockHolder === null) claim(direct, "lock")(lockBinding.chords[0]!.chord, null);
   else notes.push({ code: "lock_taken", holder: lockHolder });
   rows.push({ action: "lock", default: LOCK_KEY, mode: "terminal", source: "fixed", bindings: lockHolder === null ? [lockBinding] : [] });
-  rows.push({ action: "menu", default: MENU_KEY, mode: "terminal", source: "fixed", bindings: menuHeld ? [{ text: MENU_KEY, prefixed: true, range: false, chords: [{ chord: menuChord, index: null }] }] : [] });
+  for (const { action, key, chord, held: claimed } of own) rows.push({ action, default: key, mode: "terminal", source: "fixed", bindings: claimed ? [{ text: key, prefixed: true, range: false, chords: [{ chord, index: null }] }] : [] });
 
   const modeKeys = { navigate: {}, resize: {}, copy: {} } as Record<Exclude<Mode, "terminal">, Record<string, Bound>>;
   const fixedRows = new Map<string, HerdrKeptBinding[]>();
-  for (const { action, mode, keys: texts } of FIXED) {
+  const fixed = [...FIXED, ...Object.keys(COPY_KEYS).map((action) => ({
+    action: action as CopyAction, mode: "copy" as const, keys: COPY_KEYS[action as CopyAction],
+  }))];
+  for (const { action, mode, keys: texts } of fixed) {
     const bindings = texts.flatMap((text) => kept(fixedBinding(text), claim(modeKeys[mode], action)) ?? []);
     fixedRows.set(`${mode}:${action}`, bindings);
   }
@@ -372,7 +386,13 @@ export function buildKeymap(keys: unknown): Keymap {
     }
     rows.push({ action: name, default: entries[0]!.default, mode: "navigate", source: "herdr", bindings });
   }
-  for (const { action, mode, keys: texts } of FIXED) {
+  // after the fixed keys and herdr's navigate keys, which keep a key both want (it still runs the move after the prefix)
+  for (const action of NAVIGATE_REPEATS) {
+    const unprefixed = (text: string) => text.replace(/^prefix\+/, "");
+    const bindings = held.get(action)!.flatMap((binding) => kept({ ...binding, text: unprefixed(binding.text), prefixed: false }, claim(modeKeys.navigate, action)) ?? []);
+    rows.push({ action, default: unprefixed(resolved.actions.find((entry) => entry.action === action)!.default), mode: "navigate", source: "herdr", bindings });
+  }
+  for (const { action, mode, keys: texts } of fixed) {
     if (rows.some((row) => row.action === action && row.mode === mode)) continue;
     rows.push({ action, default: texts.join(", "), mode, source: "fixed", bindings: fixedRows.get(`${mode}:${action}`)! });
   }

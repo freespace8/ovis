@@ -44,6 +44,7 @@ async function open(origin: string): Promise<{ page: Page; asked: string[] }> {
   page.setDefaultTimeout(15_000);
   const asked: string[] = [];
   page.on("request", (request) => { if (UPDATE_REQUEST.test(new URL(request.url()).pathname)) asked.push(`${request.method()} ${new URL(request.url()).pathname}`); });
+  await page.clock.install();
   await page.goto(origin);
   await page.locator(".sidebar-footer").getByRole("button", { name: "Settings", exact: true }).click();
   await openSettingsPage(page, "About");
@@ -56,8 +57,11 @@ try {
   const control = serve("on", false);
   const on = await open(control.origin);
   await on.page.getByRole("heading", { name: "Updates", exact: true }).waitFor({ state: "attached" });
-  await on.page.waitForTimeout(3_000); // fixed wait: the update status is asked at once and again every 2 s while Settings is open
-  assert.ok(on.asked.some((line) => line === "GET /api/updates"), `the control page asks for the update status (${on.asked.join(", ")})`);
+  const deadline = Date.now() + 10_000;
+  while (!on.asked.includes("GET /api/updates")) {
+    if (Date.now() > deadline) throw new Error(`the control page did not ask for the update status (${on.asked.join(", ")})`);
+    await Bun.sleep(25);
+  }
   console.log("control: the page of a server with updates on asks for its update status");
 
   const off = serve("off", true);
@@ -70,7 +74,9 @@ try {
   assert.equal(await dialog.getByText(/Update herdr|Check for updates|Update and restart|Install herdr-core/).count(), 0, "About names no update control");
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
-  await page.waitForTimeout(5_000); // fixed wait: proving that no update request follows, the status poll being 2 s
+  // the status poll is 2 s: run the page's timers past two of them, then a round trip delivers any request they sent
+  await page.clock.runFor(5_000);
+  await page.evaluate(() => undefined);
   assert.equal(await page.locator(".update-notice").count(), 0, "no update line under the header");
   assert.deepEqual(asked, [], "the page sent no update request");
   const answer = await page.evaluate(async () => (await fetch("/api/updates", { cache: "no-store" })).status);

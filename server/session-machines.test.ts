@@ -21,7 +21,7 @@ async function fixture() {
   const events: string[] = [];
   const start = async (id: string, socket: string): Promise<MachineBridge> => {
     events.push(`start ${id} ${socket}`);
-    return { endpoint: { url: "http://127.0.0.1:1", token: "t" }, exited: new Promise(() => {}), stop: () => events.push(`stop ${id}`) };
+    return { endpoint: { url: "http://127.0.0.1:1", token: "t" }, exited: new Promise(() => {}), stop: async () => { events.push(`stop ${id}`); } };
   };
   manager.watchHerdrSessions(async () => [], start, 3_600_000);
   await settled();

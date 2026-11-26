@@ -152,8 +152,8 @@
   flex: 1;
 }
 
-/* two columns for every row (a subgrid each): the row's open link, then Forget where the row has one, in a cell of its
-   own beside the link, so a tap on the link never lands on Forget and every row's state lines up. It keeps its full
+/* two columns for every row (a subgrid each): the row's open link, then Forget or More ways where the row has one, in a
+   cell of its own beside the link, so a tap on the link never lands on it; a row with neither spans both. It keeps its full
    height (its overflow clips the rounded corners, so a column with a height cap could otherwise shrink it and cut rows
    off): the pane around it scrolls instead */
 .my-pcs-list {
@@ -211,11 +211,18 @@
 
 .my-pc > .relay-add-saved-pc > .relay-shell-pc-glyph { grid-area: chevron; }
 
+/* a row with nothing beside its link (no More ways, no Forget) keeps the whole row: the column another row's More ways
+   takes is never taken from it */
+.my-pc > .relay-add-saved-pc:only-child {
+  grid-column: 1 / -1;
+}
+
 .phone-pc-meta {
   display: flex;
   grid-area: meta;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
   max-width: 100%;
   min-width: 0;
 }
@@ -229,13 +236,26 @@
   font-size: var(--fs-xs);
 }
 
+/* an address is never cut: one too long beside the way tag goes under it, and breaks only when longer than the row */
 .my-pc-address {
   min-width: 0;
-  overflow: hidden;
   color: var(--text-dim);
   font-size: var(--fs-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+/* what a row says of its PC beside the way it is reached: a line of its own under the tags, never cut */
+.my-pc-note {
+  flex-basis: 100%;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+/* a row of several ways: the ways tag says enough on a phone; its address is a line of its own on a wide screen */
+.my-pc-address-more {
+  display: none;
 }
 
 .my-pc-state {
@@ -276,12 +296,73 @@
   text-align: start;
 }
 
+/* Forget PCs on a row of several ways: each way a line of its own under the row, its tag and address, with its own
+   Forget (or why not) in the column Forget takes */
+.my-pc > .my-pc-way {
+  display: flex;
+  grid-column: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-4) var(--space-2);
+}
+
+/* Forget PCs: why a row has no Forget, in its place and as wide, in grey: an account PC, or an SSH PC */
+.my-pc > .my-pc-kept {
+  grid-column: 2;
+  margin-inline-end: var(--space-2);
+  padding-inline: var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
 .my-pc > .phone-pc-forget {
   grid-column: 2;
   height: var(--touch-target);
   margin-inline-end: var(--space-2);
   padding-inline: var(--space-2);
   color: var(--text-dim);
+}
+
+/* More ways on a row of several: a disclosure of its own beside the row's link, in the column Forget takes, so a tap on
+   the row still opens it by the relay; open, its glyph turns up */
+.my-pc > .my-pc-more {
+  grid-column: 2;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  margin-inline-end: var(--space-2);
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+}
+
+.my-pc > .my-pc-more > svg {
+  transition: transform var(--dur-fast) ease;
+}
+
+.my-pc > .my-pc-more[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-pc > .my-pc-more > svg {
+    transition: none;
+  }
+}
+
+/* the saved ways the row's tap does not open, one to a line under it, each its way tag and the host it opens, whole */
+.my-pc > .my-pc-others:not([hidden]) {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.my-pc-others > .relay-add-other-way-button {
+  justify-content: flex-start;
 }
 
 .my-pcs-add {
@@ -687,5 +768,10 @@
   /* beside Add a PC the list is wide enough for the state word on the name's line */
   .connect-desk .my-pc > .relay-add-saved-pc {
     grid-template-areas: "name state chevron" "meta meta meta";
+  }
+
+  .connect-desk .my-pc-address-more {
+    display: block;
+    flex-basis: 100%;
   }
 }

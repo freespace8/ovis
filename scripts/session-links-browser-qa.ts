@@ -107,7 +107,7 @@ async function visitorFlow(context: BrowserContext, url: string, target: Case, o
   for (const row of rows) assert.ok(!/(^|\s)(Settings|Add PC|Enable notifications)/.test(row.trim()), `${target.name}: the palette offers "${row.trim()}"`);
   await page.keyboard.press("Escape");
   // let every background request settle before judging them
-  await page.waitForTimeout(3_000); // fixed wait: proving that no refused request follows the page's startup
+  await page.waitForLoadState("networkidle");
   // (c) nothing the server refused, in the whole visit
   assert.deepEqual(refused, [], `${target.name}: the visitor's page was refused requests`);
   assert.deepEqual(consoleErrors.filter((text) => /40[13]|Forbidden|Unauthorized|WebSocket connection/.test(text)), [], `${target.name}: the console reports a refusal`);

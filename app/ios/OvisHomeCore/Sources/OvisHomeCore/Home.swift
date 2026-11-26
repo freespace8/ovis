@@ -189,9 +189,10 @@ public enum Home {
     }
 
     /// Whether home took too long, `elapsed` seconds after it started (time the app spent in front): `loadSeconds`
-    /// with no answer, and `answerSeconds` once its page is on its way, which a slow link needs.
-    public static func timedOut(elapsed: TimeInterval, answered: Bool) -> Bool {
-        elapsed >= (answered ? answerSeconds : loadSeconds)
+    /// with no answer, and `answerSeconds` once its page is on its way, which a slow link needs. `inApp`: the build
+    /// serves home from inside the app, where no network is waited on and nothing stands in for it: never.
+    public static func timedOut(elapsed: TimeInterval, answered: Bool, inApp: Bool = false) -> Bool {
+        !inApp && elapsed >= (answered ? answerSeconds : loadSeconds)
     }
 
     /// Where the way back leads on `screen`. `failed` as for `screen`; `current`: a PC is current; `choosing`: the
@@ -228,11 +229,16 @@ public enum Home {
         return "#" + fragment
     }
 
-    /// Whether `url` and `appOrigin` are one http or https origin: scheme, host and port, the scheme's own port the
-    /// same as none.
-    private static func sameOrigin(_ url: URL?, _ appOrigin: URL?) -> Bool {
-        guard let url, let appOrigin, let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
-              scheme == appOrigin.scheme?.lowercased(), let host = url.host?.lowercased(), host == appOrigin.host?.lowercased() else { return false }
+    /// Whether `url` and `appOrigin` are one origin, http, https or the app's own scheme (`capacitor`, where a build
+    /// serves the shell from inside the app, Shell.swift): scheme, host and port. A web origin's host is one whatever
+    /// its case, and its scheme's own port the same as none, as a browser reads them. On the app's scheme a host is
+    /// compared as it is written and has no port: WebKit keeps `capacitor://APP.ovis.sh` another origin than
+    /// `capacitor://app.ovis.sh`, with storage of its own.
+    public static func sameOrigin(_ url: URL?, _ appOrigin: URL?) -> Bool {
+        guard let url, let appOrigin, let scheme = url.scheme?.lowercased(), scheme == appOrigin.scheme?.lowercased(),
+              let host = url.host, !host.isEmpty, let appHost = appOrigin.host else { return false }
+        if scheme == appScheme { return host == appHost && url.port == nil && appOrigin.port == nil }
+        guard scheme == "https" || scheme == "http", host.lowercased() == appHost.lowercased() else { return false }
         let standard = scheme == "https" ? 443 : 80
         return (url.port ?? standard) == (appOrigin.port ?? standard)
     }
@@ -245,7 +251,8 @@ public enum Home {
 
     /// The scope of the relay PC whose page `url` is (`<appOrigin>/s/<server_id>/`, the key such a PC is saved by), or nil.
     public static func relayScope(_ url: URL?, appOrigin: URL?) -> String? {
-        guard let url, let appOrigin, sameOrigin(url, appOrigin), let scheme = appOrigin.scheme?.lowercased(), let host = appOrigin.host?.lowercased(),
+        guard let url, let appOrigin, sameOrigin(url, appOrigin), let scheme = appOrigin.scheme?.lowercased(),
+              let host = scheme == appScheme ? appOrigin.host : appOrigin.host?.lowercased(),
               let path = URLComponents(url: url, resolvingAgainstBaseURL: true)?.percentEncodedPath else { return nil }
         let lower = path.lowercased()
         if path.contains("\\") || lower.contains("%2e") || lower.contains("%2f") || lower.contains("%5c") || lower.contains("%25") { return nil }
@@ -256,6 +263,49 @@ public enum Home {
         guard id.utf8.count == 32, id.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains($0) }) else { return nil }
         let shownHost = host.contains(":") ? "[\(host)]" : host
         return "\(scheme)://\(shownHost)\(appOrigin.port.map { ":\($0)" } ?? "")/s/\(id)/"
+    }
+
+    /// The saved PC whose own page `url` is, which may say which PC it is (HerdrShell identify): `current`, the PC the
+    /// app shows, when `url` is on its origin and it is saved by its address (a Tailscale or home network address, or an
+    /// SSH PC's on this phone). Nil for any other page: the hosted app at `appOrigin` and a relay PC's scope there (its
+    /// path names it already), or a page that went to another origin. So a page speaks for its own PC alone.
+    public static func identifiedKey(_ url: URL?, current: String?, appOrigin: URL?) -> String? {
+        // one origin whether or not its scheme's own port is written out (https://pc:443 is https://pc); another port is not
+        guard let current, let saved = URL(string: current), let path = URLComponents(string: current)?.percentEncodedPath,
+              path.isEmpty || path == "/", !sameOrigin(saved, appOrigin), sameOrigin(url, saved) else { return nil }
+        return current
+    }
+
+    /// A relay ID as a page says it, 32 lowercase hex digits, or nil.
+    public static func relayId(_ said: String?) -> String? {
+        guard let said, said.utf8.count == 32,
+              said.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains($0) }) else { return nil }
+        return said
+    }
+
+    /// Whether the page asking for what the app saved is the app's own: the bundled page (bundledPage), or the shell
+    /// at `appOrigin` (the hosted app, or the copy a build serves from inside the app). Only such a page is given the
+    /// saved PCs' relay IDs (getState `ids`), never a PC's own page.
+    public static func ownPage(_ url: URL?, appOrigin: URL?) -> Bool {
+        bundledPage(url) || sameOrigin(url, appOrigin)
+    }
+
+    /// The saved PCs' relay IDs (`ids`) as getState gives them to the page loaded now at `url`: to the app's own pages
+    /// alone (ownPage), else nil.
+    public static func shownIds(_ url: URL?, appOrigin: URL?, ids: [String: String]) -> [String: String]? {
+        ownPage(url, appOrigin: appOrigin) ? ids : nil
+    }
+
+    /// What the page of the saved PC `key` said of itself (identifiedKey), recorded in the app's maps: its relay ID in
+    /// `ids`, dropped when it says none ("": the address now reaches an Ovis with no relay ID; an unreadable one changes
+    /// nothing), and its name in `names` only where none is kept (one the person or an open gave stays), 64 characters
+    /// at most, counted as a person sees them (grapheme clusters, as Android's Home.capped counts them).
+    public static func identified(ids: [String: String], names: [String: String], key: String, serverId: String?, name: String?) -> (ids: [String: String], names: [String: String]) {
+        var ids = ids, names = names
+        if let id = relayId(serverId) { ids[key] = id } else if serverId == "" { ids[key] = nil }
+        let shown = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !shown.isEmpty, (names[key] ?? "").isEmpty { names[key] = String(shown.prefix(64)) }
+        return (ids, names)
     }
 
     /// The kind of a page's failure the error page tells apart by its words: "offline" when the system says this phone is
